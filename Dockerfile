@@ -11,11 +11,11 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && \
+RUN apt-get update && apt-get install -y pkg-config libssl-dev git && \
     cargo build --release --bin ferropipe-audit && \
     cargo install cargo-audit --version 0.21.2 --locked && \
     cargo install cargo-license --version 0.6.1 --locked && \
-    cargo audit fetch --stale
+    git clone --depth 1 https://github.com/rustsec/advisory-db /usr/local/cargo/advisory-db
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && \
