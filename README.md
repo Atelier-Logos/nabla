@@ -10,6 +10,7 @@ A comprehensive Rust package analysis API built with Axum that provides detailed
 - **Unsafe Code Detection**: Locates and reports unsafe code blocks
 - **Documentation Analysis**: Evaluates documentation coverage and quality
 - **Git Analysis**: Extracts repository history and commit information
+- **LLM Enrichment**: Calls OpenAI Chat Completions to generate natural-language descriptions of modules, structs, functions, traits, and usage examples
 - **API Integration**: RESTful API for integration with NextJS frontends
 - **Database Storage**: Full analysis results stored in Supabase/PostgreSQL
 
@@ -82,6 +83,7 @@ DATABASE_URL=postgresql://username:password@localhost/ferropipe_audit
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 PORT=3001
+OPENAI_API_KEY=sk-**************************************
 ```
 
 ### Database Setup
