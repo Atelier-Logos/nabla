@@ -65,8 +65,4 @@ json = "0.12"
 which = "4.4"
 
 # For resolving the home directory
-home = "0.5"
-
-# Added from the code block
-shuttle-runtime = "0.41"
-shuttle-axum = "0.41" 
+home = "0.5" 

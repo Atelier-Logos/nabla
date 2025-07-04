@@ -54,16 +54,12 @@ pub async fn analyze(package_path: &Path) -> Result<AuditResult> {
     // Install cargo-audit if not present
     ensure_cargo_audit_installed().await?;
 
-    // Run cargo audit with JSON output, accept stale db, 60s timeout
-    let cmd_fut = Command::new("cargo")
-        .args(["audit", "--json", "--color", "never", "--stale"])
+    // Run cargo audit with JSON output
+    let output = Command::new("cargo")
+        .args(["audit", "--json", "--color", "never"])
         .current_dir(package_path)
-        .output();
-
-    let output = match tokio::time::timeout(std::time::Duration::from_secs(60), cmd_fut).await {
-        Ok(res) => res?,
-        Err(_) => anyhow::bail!("cargo-audit timed out after 60s")
-    };
+        .output()
+        .await?;
 
     let raw_output = String::from_utf8_lossy(&output.stdout);
 
@@ -149,13 +145,13 @@ fn extract_cve_references(report: &JsonValue) -> JsonValue {
                     || id_str.starts_with("GHSA-");
 
                 if include {
-                    cve_refs.push(serde_json::json!({
+                        cve_refs.push(serde_json::json!({
                         "id": id_str,
-                        "severity": advisory.get("severity").unwrap_or(&JsonValue::Null),
-                        "title": advisory.get("title").unwrap_or(&JsonValue::Null),
-                        "description": advisory.get("description").unwrap_or(&JsonValue::Null),
-                        "affected_package": vuln.get("package").and_then(|p| p.get("name"))
-                    }));
+                            "severity": advisory.get("severity").unwrap_or(&JsonValue::Null),
+                            "title": advisory.get("title").unwrap_or(&JsonValue::Null),
+                            "description": advisory.get("description").unwrap_or(&JsonValue::Null),
+                            "affected_package": vuln.get("package").and_then(|p| p.get("name"))
+                        }));
                 }
             }
         }

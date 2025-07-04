@@ -108,16 +108,11 @@ async fn ensure_cargo_license_installed() -> Result<()> {
 }
 
 async fn run_cargo_license(package_path: &Path) -> Result<String> {
-    // Run with --avoid-build-deps to skip building deps and cap runtime to 30s
-    let cmd_fut = Command::new("cargo")
-        .args(["license", "--json", "--avoid-build-deps"])
+    let output = Command::new("cargo")
+        .args(["license", "--json"])
         .current_dir(package_path)
-        .output();
-
-    let output = match tokio::time::timeout(std::time::Duration::from_secs(30), cmd_fut).await {
-        Ok(res) => res?,
-        Err(_) => anyhow::bail!("cargo-license timed out after 30s")
-    };
+        .output()
+        .await?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())

@@ -17,7 +17,6 @@ pub async fn analyze(package_path: &Path) -> Result<MetadataResult> {
 
     let metadata = MetadataCommand::new()
         .manifest_path(package_path.join("Cargo.toml"))
-        .no_deps()
         .exec()?;
 
     let package = metadata
