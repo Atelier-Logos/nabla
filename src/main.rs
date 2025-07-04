@@ -16,8 +16,8 @@ mod database;
 use config::Config;
 use database::DatabasePool;
 
-#[shuttle_runtime::main]
-async fn main() -> shuttle_axum::ShuttleAxum {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
 
@@ -52,9 +52,13 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .layer(cors)
         .with_state(AppState { pool, config: config.clone() });
 
-    tracing::info!("Axum router constructed – handing off to Shuttle runtime");
+    let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;
+    
+    tracing::info!("Server starting on port {}", config.port);
+    
+    axum::serve(listener, app).await?;
 
-    Ok(app.into())
+    Ok(())
 }
 
 #[derive(Clone)]
