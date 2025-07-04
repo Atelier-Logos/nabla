@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && \
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libssl3 cargo rustc && \
+    apt-get install -y --no-install-recommends ca-certificates libssl3 cargo rustc git && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/ferropipe-audit /usr/local/bin/ferropipe-audit
 COPY --from=builder /usr/local/cargo/bin/cargo-audit        /usr/local/bin/cargo-audit
