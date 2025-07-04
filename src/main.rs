@@ -21,6 +21,11 @@ async fn main() -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
 
+    // Ensure Cargo writes its registry/cache into a writable directory (Lambda / container FS is readonly under /usr/local)
+    let temp_cargo_home = std::env::temp_dir().join("cargo_home");
+    std::fs::create_dir_all(&temp_cargo_home)?;
+    std::env::set_var("CARGO_HOME", &temp_cargo_home);
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
