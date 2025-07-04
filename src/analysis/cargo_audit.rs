@@ -54,12 +54,16 @@ pub async fn analyze(package_path: &Path) -> Result<AuditResult> {
     // Install cargo-audit if not present
     ensure_cargo_audit_installed().await?;
 
-    // Run cargo audit with JSON output
-    let output = Command::new("cargo")
-        .args(["audit", "--json", "--color", "never"])
+    // Run cargo audit with JSON output, accept stale db, 60s timeout
+    let cmd_fut = Command::new("cargo")
+        .args(["audit", "--json", "--color", "never", "--stale"])
         .current_dir(package_path)
-        .output()
-        .await?;
+        .output();
+
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(60), cmd_fut).await {
+        Ok(res) => res?,
+        Err(_) => anyhow::bail!("cargo-audit timed out after 60s")
+    };
 
     let raw_output = String::from_utf8_lossy(&output.stdout);
 

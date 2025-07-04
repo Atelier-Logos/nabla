@@ -14,7 +14,8 @@ COPY . .
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && \
     cargo build --release --bin ferropipe-audit && \
     cargo install cargo-audit --version 0.21.2 --locked && \
-    cargo install cargo-license --version 0.6.1 --locked
+    cargo install cargo-license --version 0.6.1 --locked && \
+    cargo audit fetch --stale
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && \
@@ -23,4 +24,5 @@ RUN apt-get update && \
 COPY --from=builder /app/target/release/ferropipe-audit /usr/local/bin/ferropipe-audit
 COPY --from=builder /usr/local/cargo/bin/cargo-audit        /usr/local/bin/cargo-audit
 COPY --from=builder /usr/local/cargo/bin/cargo-license      /usr/local/bin/cargo-license
+COPY --from=builder /usr/local/cargo/advisory-db       /usr/local/cargo/advisory-db
 ENTRYPOINT ["/usr/local/bin/ferropipe-audit"]
