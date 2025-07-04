@@ -6,7 +6,21 @@ use which::which;
 use std::os::unix::fs::PermissionsExt;
 use tokio::fs;
 
-const CARGO_AUDIT_URL: &str = "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.21.2/cargo-audit-aarch64-unknown-linux-gnu-v0.21.2.tgz";
+/// Returns a prebuilt `cargo-audit` tarball URL suited for the current CPU architecture.
+/// We only bundle Linux builds because the server runtime is Linux.
+fn cargo_audit_url() -> Option<String> {
+    // Map of arch -> asset suffix used by RustSec release artefacts
+    // See https://github.com/rustsec/rustsec/releases/tag/cargo-audit%2Fv0.21.2
+    let suffix = match std::env::consts::ARCH {
+        "x86_64" => "x86_64-unknown-linux-gnu",
+        "aarch64" | "arm64" => "aarch64-unknown-linux-gnu",
+        _ => return None, // unsupported arch
+    };
+
+    Some(format!(
+        "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.21.2/cargo-audit-{suffix}-v0.21.2.tgz"
+    ))
+}
 
 async fn download_prebuilt_tool(url: &str, binary_name: &str) -> Result<()> {
     let home_dir = home::home_dir().ok_or_else(|| anyhow::anyhow!("Home directory not found"))?;
@@ -106,20 +120,26 @@ async fn ensure_cargo_audit_installed() -> Result<()> {
         return Ok(());
     }
 
-    // Try downloading prebuilt binary first
-    tracing::info!("Attempting to download prebuilt cargo-audit binary...");
-    if let Err(e) = download_prebuilt_tool(CARGO_AUDIT_URL, "cargo-audit").await {
-        tracing::warn!("Prebuilt download failed: {}. Falling back to cargo install.", e);
-
-        // Fallback to cargo install
-        let install_output = Command::new("cargo")
-            .args(["install", "cargo-audit"])
-            .output()
-            .await?;
-
-        if !install_output.status.success() {
-            anyhow::bail!("Failed to install cargo-audit: {}", String::from_utf8_lossy(&install_output.stderr));
+    // Try downloading prebuilt binary first (architecture-aware)
+    if let Some(url) = cargo_audit_url() {
+        tracing::info!("Attempting to download prebuilt cargo-audit binary from {url}");
+        if download_prebuilt_tool(&url, "cargo-audit").await.is_ok() {
+            return Ok(());
         }
+        tracing::warn!("Failed to download prebuilt cargo-audit for current arch; falling back to cargo install");
+    } else {
+        tracing::warn!("No prebuilt cargo-audit available for arch {}; falling back to cargo install", std::env::consts::ARCH);
+    }
+
+    // Fallback to cargo install (may be heavy but hopefully succeeds)
+    tracing::info!("Installing cargo-audit via `cargo install` – this may take a while...");
+    let install_output = Command::new("cargo")
+        .args(["install", "cargo-audit", "--locked"])
+        .output()
+        .await?;
+
+    if !install_output.status.success() {
+        anyhow::bail!("Failed to install cargo-audit: {}", String::from_utf8_lossy(&install_output.stderr));
     }
 
     Ok(())
