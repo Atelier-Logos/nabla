@@ -9,16 +9,14 @@ use tokio::fs;
 /// Returns a prebuilt `cargo-audit` tarball URL suited for the current CPU architecture.
 /// We only bundle Linux builds because the server runtime is Linux.
 fn cargo_audit_url() -> Option<String> {
-    // Map of arch -> asset suffix used by RustSec release artefacts
-    // See https://github.com/rustsec/rustsec/releases/tag/cargo-audit%2Fv0.21.2
     let suffix = match std::env::consts::ARCH {
         "x86_64" => "x86_64-unknown-linux-gnu",
         "aarch64" | "arm64" => "aarch64-unknown-linux-gnu",
-        _ => return None, // unsupported arch
+        _ => return None,
     };
-
     Some(format!(
-        "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.21.2/cargo-audit-{suffix}-v0.21.2.tgz"
+        "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.21.2/\
+         cargo-audit-{suffix}.tar.xz"
     ))
 }
 
@@ -33,12 +31,12 @@ async fn download_prebuilt_tool(url: &str, binary_name: &str) -> Result<()> {
     }
 
     let bytes = response.bytes().await?;
-    let archive_path = bin_dir.join(format!("{}.tgz", binary_name));
+    let archive_path = bin_dir.join(format!("{binary_name}.tar.xz"));
     fs::write(&archive_path, &bytes).await?;
 
     // Extract
     let output = Command::new("tar")
-        .args(["-xzf", archive_path.to_str().unwrap(), "-C", bin_dir.to_str().unwrap()])
+        .args(["-xJf", archive_path.to_str().unwrap(), "-C", bin_dir.to_str().unwrap()])
         .output()
         .await?;
 
