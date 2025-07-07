@@ -1,7 +1,7 @@
 # Ferropipe 🦀
 
-[![CI](https://github.com/jdbohrman/ferropipe-audit/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/jdbohrman/ferropipe-audit/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/jdbohrman/ferropipe-audit?style=flat-square)](./LICENSE)
+[![CI](https://github.com/jdbohrman/ferropipe-audit/actions/workflows/ci.yml/badge.svg?style=flat-square)](https://github.com/Atelier-Logos/ferropipe/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Atelier-Logos/ferropipe?style=flat-square)](./LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/ferropipe-audit)
 [![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-green?style=flat-square)](https://platform.openai.com/)
