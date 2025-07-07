@@ -1,21 +1,11 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM rust:1.82-slim AS builder
 WORKDIR /app
-
-FROM chef AS planner
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN cargo build --release
 
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
-# Build application
-COPY . .
-RUN rustup target add x86_64-unknown-linux-musl
-RUN apt-get update && apt-get install -y musl-tools && \
-    cargo build --release --bin ferropipe-audit --target x86_64-unknown-linux-musl
-
-# We do not need the Rust toolchain to run the binary!
-FROM scratch
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/ferropipe-audit /ferropipe-audit
-ENTRYPOINT ["/ferropipe-audit"]
+FROM rust:1.82-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libacl1 && rm -rf /var/lib/apt/lists/*
+RUN cargo install --locked cargo-audit --version 0.21.2
+COPY --from=builder /app/target/release/ferropipe-audit /usr/local/bin/ferropipe-audit
+ENTRYPOINT ["ferropipe-audit"]

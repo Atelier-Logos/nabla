@@ -1,9 +1,17 @@
 use axum::{
     extract::{State, Json},
+    extract::Path,
     http::StatusCode,
     response::Json as ResponseJson,
+    http::{header, Method},
+    routing::post,
+    routing::get,
+    Router,
+    Extension,
 };
 use serde_json::json;
+use uuid::Uuid;
+use crate::middleware::ApiKeyRecord;
 
 use crate::{
     AppState,
@@ -19,38 +27,43 @@ pub async fn health_check() -> ResponseJson<serde_json::Value> {
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn analyze_package(
     State(app_state): State<AppState>,
-    Json(request): Json<AnalyzeRequest>,
+    Extension(api_key): Extension<ApiKeyRecord>,
+    Json(mut request): Json<AnalyzeRequest>,
 ) -> Result<ResponseJson<AnalyzeResponse>, (StatusCode, ResponseJson<AnalyzeResponse>)> {
     tracing::info!("Received analysis request for {}:{}", request.name, request.version);
 
-    // Verify API key
-    let key_id = match app_state.pool.verify_api_key(&request.api_key).await {
-        Ok(Some(key_id)) => key_id,
-        Ok(None) => {
-            tracing::warn!("Invalid API key provided");
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                ResponseJson(AnalyzeResponse {
-                    success: false,
-                    package_id: None,
-                    message: "Invalid API key".to_string(),
-                })
-            ));
-        }
-        Err(e) => {
-            tracing::error!("Failed to verify API key: {}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(AnalyzeResponse {
-                    success: false,
-                    package_id: None,
-                    message: "Database error".to_string(),
-                })
-            ));
-        }
-    };
+    let key_id = api_key.id;
+
+    // ---------------- Determine extraction depth ----------------
+    let mut depth_normalized = request.extraction_depth.trim().to_lowercase();
+
+    // If client didn't supply or supplied an unknown value, fall back to tier mapping
+    let allowed = ["basic", "full", "deep"];
+    if !allowed.contains(&depth_normalized.as_str()) {
+        depth_normalized = match api_key.tier.as_str() {
+            "professional" => "full".to_string(),
+            "enterprise" => "deep".to_string(),
+            _ => "basic".to_string(),
+        };
+    }
+
+    request.extraction_depth = depth_normalized.clone();
+
+    tracing::info!("Extraction depth for analysis: {}", request.extraction_depth);
+
+    // ---------------- Determine cache expiry -------------------
+    if request.cache_expires_at.is_none() {
+        use chrono::{Duration, Utc};
+        let duration = match api_key.tier.as_str() {
+            "professional" => Duration::days(14),
+            "enterprise" => Duration::days(7),
+            _ => Duration::days(30),
+        };
+        request.cache_expires_at = Some(Utc::now() + duration);
+    }
 
     // Validate input parameters
     if request.name.is_empty() || request.version.is_empty() {
@@ -60,6 +73,7 @@ pub async fn analyze_package(
                 success: false,
                 package_id: None,
                 message: "Package name and version are required".to_string(),
+                full_analysis: None,
             })
         ));
     }
@@ -76,6 +90,7 @@ pub async fn analyze_package(
                     success: false,
                     package_id: None,
                     message: format!("Failed to download package: {}", e),
+                    full_analysis: None,
                 })
             ));
         }
@@ -93,6 +108,7 @@ pub async fn analyze_package(
                     success: false,
                     package_id: None,
                     message: format!("Analysis failed: {}", e),
+                    full_analysis: None,
                 })
             ));
         }
@@ -109,6 +125,7 @@ pub async fn analyze_package(
                     success: false,
                     package_id: None,
                     message: "Failed to save analysis results".to_string(),
+                    full_analysis: None,
                 })
             ));
         }
@@ -117,9 +134,27 @@ pub async fn analyze_package(
     tracing::info!("Successfully analyzed {}:{} with ID {}", 
         request.name, request.version, package_id);
 
+    let full_json = serde_json::to_value(&analysis).unwrap_or(serde_json::json!({}));
+
     Ok(ResponseJson(AnalyzeResponse {
         success: true,
         package_id: Some(package_id),
         message: format!("Package {}:{} analyzed successfully", request.name, request.version),
+        full_analysis: Some(full_json),
     }))
+}
+
+// ---------------- Fetch package analysis ----------------
+
+pub async fn fetch_package_analysis(
+    State(app_state): State<AppState>,
+    Extension(_api_key): Extension<ApiKeyRecord>,
+    Path(package_id): Path<Uuid>,
+) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
+    // Api key already validated by middleware; fetch analysis
+    match app_state.pool.get_full_analysis(&package_id).await {
+        Ok(Some(json)) => Ok(ResponseJson(json)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 } 

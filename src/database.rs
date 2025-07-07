@@ -92,6 +92,28 @@ impl DatabasePool {
         .execute(&self.pool)
         .await?;
 
+        // store the full analysis JSON for quick fetch endpoint
+        let full_json = serde_json::to_value(package)?;
+        sqlx::query("UPDATE packages SET full_analysis = $2 WHERE id = $1")
+            .bind(&id)
+            .bind(&full_json)
+            .execute(&self.pool)
+            .await?;
+
         Ok(id)
+    }
+
+    pub async fn get_full_analysis(&self, id: &uuid::Uuid) -> Result<Option<serde_json::Value>> {
+        let row = sqlx::query("SELECT full_analysis FROM packages WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(row) = row {
+            let json: serde_json::Value = row.get("full_analysis");
+            Ok(Some(json))
+        } else {
+            Ok(None)
+        }
     }
 } 

@@ -1,2 +1,4 @@
 fly.toml
 .git/
+# Ignore build artifacts so the Docker build context stays small
+/target/

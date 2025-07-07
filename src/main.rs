@@ -12,6 +12,7 @@ mod models;
 mod routes;
 mod analysis;
 mod database;
+mod middleware;
 
 use config::Config;
 use database::DatabasePool;
@@ -20,11 +21,6 @@ use database::DatabasePool;
 async fn main() -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
-
-    // Ensure Cargo writes its registry/cache into a writable directory (Lambda / container FS is readonly under /usr/local)
-    let temp_cargo_home = std::env::temp_dir().join("cargo_home");
-    std::fs::create_dir_all(&temp_cargo_home)?;
-    std::env::set_var("CARGO_HOME", &temp_cargo_home);
 
     // Initialize tracing
     tracing_subscriber::registry()
@@ -50,12 +46,20 @@ async fn main() -> anyhow::Result<()> {
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
+    // Build the shared application state
+    let state = AppState { pool, config: config.clone() };
+
+    // Create middleware layer that validates API keys & enforces quotas
+    let auth_layer = axum::middleware::from_fn_with_state(state.clone(), middleware::validate_api_key);
+
     // Build the router
     let app = Router::new()
         .route("/analyze", post(routes::analyze_package))
         .route("/health", axum::routing::get(routes::health_check))
+        .route("/packages/:id", axum::routing::get(routes::fetch_package_analysis))
         .layer(cors)
-        .with_state(AppState { pool, config: config.clone() });
+        .route_layer(auth_layer)
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;
     

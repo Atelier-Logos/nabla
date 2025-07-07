@@ -43,7 +43,7 @@ walkdir = "2.0"
 tempfile = "3.0"
 
 # Git operations
-git2 = { version = "0.18", features = ["vendored-openssl"] }
+git2 = { version = "0.18", default-features = false, features = ["vendored-libgit2"] }
 
 # TOML parsing
 toml = "0.8"
@@ -65,4 +65,14 @@ json = "0.12"
 which = "4.4"
 
 # For resolving the home directory
-home = "0.5" 
+home = "0.5"
+
+# Additional dependencies for tar extraction
+flate2 = "1.0"
+tar = "0.4"
+
+# Additional dependencies for url crate
+url = "2.4" 
+
+# Additional dependencies for base64ct
+base64ct = "=1.7.3" 

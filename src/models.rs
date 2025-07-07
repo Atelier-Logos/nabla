@@ -3,11 +3,13 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use sqlx::types::JsonValue;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AnalyzeRequest {
     pub name: String,
     pub version: String,
-    pub api_key: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
     pub extraction_depth: String,
     pub cache_expires_at: Option<DateTime<Utc>>,
 }
@@ -17,9 +19,10 @@ pub struct AnalyzeResponse {
     pub success: bool,
     pub package_id: Option<Uuid>,
     pub message: String,
+    pub full_analysis: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PackageAnalysis {
     pub package_name: String,
     pub version: String,

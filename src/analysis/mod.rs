@@ -20,6 +20,9 @@ use crate::database::DatabasePool;
 use anyhow::{Context, anyhow};
 use reqwest::header::{USER_AGENT, ACCEPT};
 use serde::Deserialize;
+use std::io::Cursor;
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 pub struct PackageAnalyzer {
     _temp_dir: tempfile::TempDir,
@@ -138,29 +141,14 @@ impl PackageAnalyzer {
         let bytes = response.bytes().await?;
         tracing::debug!("Downloaded {} bytes", bytes.len());
         
-        // Save the tarball
-        let tar_path = target_path.parent().unwrap().join(format!("{}-{}.crate", name, version));
-        tokio::fs::write(&tar_path, bytes).await?;
-        tracing::debug!("Saved tarball to {:?}", tar_path);
-        
-        // Extract the tarball
-        let output = TokioCommand::new("tar")
-            .args([
-                "-xzf", 
-                tar_path.to_str().unwrap(),
-                "-C", 
-                target_path.parent().unwrap().to_str().unwrap()
-            ])
-            .output()
-            .await?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to extract package: {}", stderr);
-        }
+        // Extract the tarball in-process (no external `tar` needed)
+        let gz = GzDecoder::new(Cursor::new(bytes));
+        let mut archive = Archive::new(gz);
+        archive.unpack(target_path.parent().unwrap())
+            .with_context(|| "Failed to extract .crate tarball")?;
 
         tracing::debug!("Successfully extracted package to {:?}", target_path);
-        
+
         // Verify the extraction worked
         let cargo_toml_path = target_path.join("Cargo.toml");
         if !cargo_toml_path.exists() {
@@ -177,9 +165,6 @@ impl PackageAnalyzer {
             
             anyhow::bail!("Package extraction failed: Cargo.toml not found");
         }
-
-        // Clean up the tarball
-        let _ = tokio::fs::remove_file(&tar_path).await;
 
         Ok(())
     }

@@ -4,15 +4,38 @@ A comprehensive Rust package analysis API built with Axum that provides detailed
 
 ## Features
 
-- **Security Analysis**: Integration with `cargo-audit` for vulnerability scanning
-- **License Analysis**: Detection and analysis of licenses using `cargo-license`
-- **Source Code Analysis**: Using `syn` to extract structural information
-- **Unsafe Code Detection**: Locates and reports unsafe code blocks
-- **Documentation Analysis**: Evaluates documentation coverage and quality
-- **Git Analysis**: Extracts repository history and commit information
-- **LLM Enrichment**: Calls OpenAI Chat Completions to generate natural-language descriptions of modules, structs, functions, traits, and usage examples
+- **Security Analysis**: Integration with `cargo-audit` for vulnerability scanning *(not LLM-enriched)*
+- **License Analysis**: Detection and analysis of licenses using `cargo-license` *(not LLM-enriched)*
+- **Source Code Analysis**: Using `syn` to extract structural information *(partially LLM-enriched, see below)*
+- **Unsafe Code Detection**: Locates and reports unsafe code blocks *(not LLM-enriched)*
+- **Documentation Analysis**: Evaluates documentation coverage and quality *(partially LLM-enriched)*
+- **Git Analysis**: Extracts repository history and commit information *(not LLM-enriched)*
+- **LLM Enrichment (OpenAI)**: Calls OpenAI Chat Completions to generate natural-language descriptions and summaries for:
+  - Modules
+  - Structs
+  - Functions
+  - Traits
+  - Usage examples
+  - Documentation summaries
 - **API Integration**: RESTful API for integration with NextJS frontends
 - **Database Storage**: Full analysis results stored in Supabase/PostgreSQL
+
+## LLM Enrichment Details
+
+The following fields are **enriched via OpenAI** (LLM):
+- **Module Descriptions**: Natural-language summaries of each module's purpose and contents
+- **Struct/Enum/Type Descriptions**: Human-readable explanations of data structures
+- **Function/Trait Descriptions**: Summaries of what each function or trait does
+- **Usage Examples**: LLM-generated code snippets or usage patterns
+- **Documentation Summaries**: High-level summaries of documentation coverage and quality
+
+The following fields are **not LLM-enriched** (static analysis only):
+- **Security Audit Results**: Direct output from `cargo-audit`
+- **License Information**: Direct output from `cargo-license`
+- **Dependency Graphs**: From `cargo metadata`
+- **Unsafe Code Locations**: From static code analysis
+- **Git History**: From `git2`/repository inspection
+- **Build Information**: Static detection of build scripts, macros, etc.
 
 ## API Endpoints
 
@@ -35,7 +58,15 @@ Analyzes a Rust package and stores results in the database.
 {
   "success": true,
   "package_id": "uuid-of-analysis",
-  "message": "Package serde:1.0.0 analyzed successfully"
+  "message": "Package serde:1.0.0 analyzed successfully",
+  "enriched_fields": [
+    "module_descriptions",
+    "struct_descriptions",
+    "function_descriptions",
+    "trait_descriptions",
+    "usage_examples",
+    "documentation_summaries"
+  ]
 }
 ```
 
@@ -56,20 +87,20 @@ Health check endpoint.
 
 The API extracts and stores the following information:
 
-- **Package Metadata**: Name, version, description, repository, homepage, documentation
-- **Dependencies**: Full dependency graph with version requirements
-- **Source Analysis**: Key modules, structs, functions, traits
-- **Security**: Cargo audit results, unsafe code locations, CVE references
-- **Licenses**: License information from multiple sources
-- **Documentation**: Coverage analysis and quality metrics
-- **Build Information**: Presence of build.rs, macro usage
-- **Git History**: Last commit date, estimated publish date
+- **Package Metadata**: Name, version, description, repository, homepage, documentation *(not LLM-enriched)*
+- **Dependencies**: Full dependency graph with version requirements *(not LLM-enriched)*
+- **Source Analysis**: Key modules, structs, functions, traits *(LLM-enriched: descriptions, summaries, usage examples)*
+- **Security**: Cargo audit results, unsafe code locations, CVE references *(not LLM-enriched)*
+- **Licenses**: License information from multiple sources *(not LLM-enriched)*
+- **Documentation**: Coverage analysis and quality metrics *(LLM-enriched: summaries and quality analysis)*
+- **Build Information**: Presence of build.rs, macro usage *(not LLM-enriched)*
+- **Git History**: Last commit date, estimated publish date *(not LLM-enriched)*
 
 ## Setup
 
 ### Prerequisites
 
-- Rust 1.70+
+- Rust 1.82+
 - PostgreSQL database (or Supabase)
 - `cargo-audit` (automatically installed)
 - `cargo-license` (automatically installed)
@@ -82,7 +113,7 @@ Copy `.env.example` to `.env` and configure:
 DATABASE_URL=postgresql://username:password@localhost/ferropipe_audit
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
-PORT=3001
+PORT=8080
 OPENAI_API_KEY=sk-**************************************
 ```
 
@@ -102,19 +133,19 @@ sqlx migrate run
 cargo run
 ```
 
-The server will start on the configured port (default: 3001).
+The server will start on the configured port (default: 8080).
 
 ## Database Schema
 
 ### packages table
 
 Stores complete analysis results with fields for:
-- Package metadata (name, version, description, etc.)
-- Structural analysis (modules, structs, functions, traits)
-- Security analysis (audit reports, unsafe usage, CVEs)
-- Documentation metrics
-- Git information
-- License data
+- Package metadata (name, version, description, etc.) *(not LLM-enriched)*
+- Structural analysis (modules, structs, functions, traits) *(LLM-enriched: descriptions, summaries, usage)*
+- Security analysis (audit reports, unsafe usage, CVEs) *(not LLM-enriched)*
+- Documentation metrics *(LLM-enriched: summaries)*
+- Git information *(not LLM-enriched)*
+- License data *(not LLM-enriched)*
 
 ### api_keys table
 
@@ -125,33 +156,14 @@ Manages API authentication:
 
 ## Integration
 
-### NextJS Frontend
-
-```typescript
-const analyzePackage = async (name: string, version: string) => {
-  const response = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name,
-      version,
-      api_key: process.env.FERROPIPE_API_KEY,
-      extraction_depth: 'deep'
-    })
-  });
-  
-  return response.json();
-};
-```
-
 ## Tools Integration
 
-- **cargo-audit**: Vulnerability scanning with advisory database
-- **cargo-license**: License information extraction
-- **cargo metadata**: Package metadata and dependency graphs
-- **syn**: AST parsing for source code analysis
-- **rustdoc**: Documentation generation and analysis
-- **git2**: Repository history analysis
+- **cargo-audit**: Vulnerability scanning with advisory database *(not LLM-enriched)*
+- **cargo-license**: License information extraction *(not LLM-enriched)*
+- **cargo metadata**: Package metadata and dependency graphs *(not LLM-enriched)*
+- **syn**: AST parsing for source code analysis *(partially LLM-enriched)*
+- **rustdoc**: Documentation generation and analysis *(partially LLM-enriched)*
+- **git2**: Repository history analysis *(not LLM-enriched)*
 
 ## Performance
 
