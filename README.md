@@ -2,7 +2,7 @@
 
 [![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/ferropipe-audit)
-[![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-black?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/)
+[![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-purple?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/)
 
 A comprehensive Rust crate intelligence API built with Axum, OpenAI, and tools such as `rust-audit` that provides detailed LLM enriched insights into internal security posture and structural implementation details. 
 
