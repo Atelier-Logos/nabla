@@ -1,3 +1,5 @@
+![](./public/banner.png)
+
 # Ferropipe 🦀
 
 [![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
@@ -14,15 +16,8 @@ A comprehensive Rust crate intelligence API built with Axum, OpenAI, and tools s
 - **Unsafe Code Detection**: Locates and reports unsafe code blocks *(not LLM-enriched)*
 - **Documentation Analysis**: Evaluates documentation coverage and quality *(partially LLM-enriched)*
 - **Git Analysis**: Extracts repository history and commit information *(not LLM-enriched)*
-- **LLM Enrichment (OpenAI)**: Calls OpenAI Chat Completions to generate natural-language descriptions and summaries for:
-  - Modules
-  - Structs
-  - Functions
-  - Traits
-  - Usage examples
-  - Documentation summaries
-- **API Integration**: RESTful API for integration with NextJS frontends
-- **Database Storage**: Full analysis results stored in Supabase/PostgreSQL
+- **API Integration**: RESTful API for integration with any platform
+- **Database Storage**: Full analysis results stored in PostgreSQL
 
 ## LLM Enrichment Details
 
