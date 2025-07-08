@@ -52,13 +52,21 @@ async fn main() -> anyhow::Result<()> {
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), middleware::validate_api_key);
 
-    // Build the router
-    let app = Router::new()
+    // Public routes (no auth)
+    let public_routes = Router::new()
+        .route("/health", axum::routing::get(routes::health_check));
+
+    // Protected routes (with auth)
+    let protected_routes = Router::new()
         .route("/analyze", post(routes::analyze_package))
-        .route("/health", axum::routing::get(routes::health_check))
         .route("/packages/:id", axum::routing::get(routes::fetch_package_analysis))
+        .route_layer(auth_layer);
+
+    // Build the main app router
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .layer(cors)
-        .route_layer(auth_layer)
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;
