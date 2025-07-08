@@ -43,25 +43,17 @@ impl PackageAnalyzer {
         })
     }
 
-    pub async fn analyze(&self, request: &AnalyzeRequest, key_id: uuid::Uuid) -> Result<PackageAnalysis> {
-        tracing::info!("Starting analysis for {}:{}", request.name, request.version);
+    pub async fn analyze(&self, request: &AnalyzeRequest, key_id: uuid::Uuid, extraction_depth: &str) -> Result<PackageAnalysis> {
+        tracing::info!("Starting analysis for {}:{} with depth: {}", request.name, request.version, extraction_depth);
 
-        // Run all analyses in parallel where possible
+        // Always run basic analyses
         let (
             metadata_result,
-            audit_result,
-            source_analysis,
-            docs_analysis,
-            unsafe_analysis,
             license_analysis,
             git_analysis,
             crate_info
         ) = tokio::try_join!(
             cargo_metadata::analyze(&self.package_path),
-            cargo_audit::analyze(&self.package_path),
-            source_analyzer::analyze(&self.package_path, &request.extraction_depth),
-            documentation::analyze(&self.package_path),
-            unsafe_detector::analyze(&self.package_path),
             license_analyzer::analyze(&self.package_path),
             git_analyzer::analyze(&self.package_path),
             fetch_crates_io_info(&request.name, &request.version)
@@ -77,7 +69,7 @@ impl PackageAnalyzer {
         // Read Cargo.toml if it exists
         let cargo_toml = self.read_cargo_toml().await.ok();
 
-        // Construct the final analysis result
+        // Initialize analysis with basic data
         let mut analysis = PackageAnalysis {
             package_name: request.name.clone(),
             version: request.version.clone(),
@@ -87,36 +79,75 @@ impl PackageAnalyzer {
             repository: metadata_result.repository,
             homepage: metadata_result.homepage,
             documentation: metadata_result.documentation,
-            key_modules: source_analysis.key_modules,
-            important_structs: source_analysis.important_structs,
-            notable_functions: source_analysis.notable_functions,
-            traits: source_analysis.traits,
             features: metadata_result.features,
-            api_usage_examples: source_analysis.api_examples,
-            dependency_graph: metadata_result.dependencies,
             updated_at: Utc::now(),
             cargo_toml,
-            source: source_analysis.source_stats,
-            docs_quality_score: docs_analysis.quality_score,
             last_git_commit: git_analysis.last_commit.or(github_commit),
             publish_date: git_analysis.publish_date.or(crate_info.publish_date),
-            cargo_audit_report: audit_result.report,
-            unsafe_usage_locations: unsafe_analysis.locations,
-            uses_unsafe: unsafe_analysis.uses_unsafe,
             licenses: license_analysis.licenses,
-            macro_usage: source_analysis.macro_usage,
-            build_rs_present: source_analysis.build_rs_present,
-            public_api_surface: source_analysis.public_api_surface,
-            known_cve_references: audit_result.cve_references,
-            external_crates_used: source_analysis.external_crates,
             cache_expires_at: request.cache_expires_at,
             key_id,
+            // Initialize deep analysis fields as empty
+            key_modules: serde_json::json!([]),
+            important_structs: serde_json::json!([]),
+            notable_functions: serde_json::json!([]),
+            traits: serde_json::json!([]),
+            api_usage_examples: serde_json::json!([]),
+            dependency_graph: serde_json::json!([]),
+            docs_quality_score: serde_json::json!([]),
+            cargo_audit_report: serde_json::json!([]),
+            unsafe_usage_locations: serde_json::json!([]),
+            uses_unsafe: false,
+            macro_usage: serde_json::json!([]),
+            build_rs_present: false,
+            public_api_surface: 0,
+            known_cve_references: serde_json::json!([]),
+            external_crates_used: Vec::new(),
+            source: serde_json::json!({}),
         };
 
-        // Enrich with LLM (best-effort; errors are logged inside function)
-        llm_enricher::enrich_analysis(&mut analysis).await.ok();
+        // Run deep analyses only for non-basic tiers
+        if extraction_depth != "basic" {
+            tracing::info!("Running deep analysis for depth: {}", extraction_depth);
+            
+            let (
+                audit_result,
+                source_analysis,
+                docs_analysis,
+                unsafe_analysis,
+            ) = tokio::try_join!(
+                cargo_audit::analyze(&self.package_path),
+                source_analyzer::analyze(&self.package_path, &request.extraction_depth),
+                documentation::analyze(&self.package_path),
+                unsafe_detector::analyze(&self.package_path),
+            )?;
 
-        tracing::info!("Analysis completed for {}:{}", request.name, request.version);
+            // Update analysis with deep analysis results
+            analysis.key_modules = source_analysis.key_modules;
+            analysis.important_structs = source_analysis.important_structs;
+            analysis.notable_functions = source_analysis.notable_functions;
+            analysis.traits = source_analysis.traits;
+            analysis.api_usage_examples = source_analysis.api_examples;
+            analysis.dependency_graph = metadata_result.dependencies;
+            analysis.docs_quality_score = docs_analysis.quality_score;
+            analysis.cargo_audit_report = audit_result.report;
+            analysis.unsafe_usage_locations = unsafe_analysis.locations;
+            analysis.uses_unsafe = unsafe_analysis.uses_unsafe;
+            analysis.macro_usage = source_analysis.macro_usage;
+            analysis.build_rs_present = source_analysis.build_rs_present;
+            analysis.public_api_surface = source_analysis.public_api_surface;
+            analysis.known_cve_references = audit_result.cve_references;
+            analysis.external_crates_used = source_analysis.external_crates;
+            analysis.source = source_analysis.source_stats;
+        }
+
+        // Run LLM enrichment for professional and enterprise tiers
+        if extraction_depth == "full" || extraction_depth == "deep" {
+            tracing::info!("Running LLM enrichment for depth: {}", extraction_depth);
+            llm_enricher::enrich_analysis(&mut analysis).await.ok();
+        }
+
+        tracing::info!("Analysis completed for {}:{} with depth: {}", request.name, request.version, extraction_depth);
         Ok(analysis)
     }
 

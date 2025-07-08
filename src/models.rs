@@ -22,7 +22,7 @@ pub struct AnalyzeResponse {
     pub full_analysis: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageAnalysis {
     pub package_name: String,
     pub version: String,
