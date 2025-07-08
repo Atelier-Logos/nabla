@@ -39,5 +39,7 @@
             PORT: ${{ secrets.PORT }}
             OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           run: |
-            docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+            docker build \
+              --build-arg DATABASE_URL=${{ secrets.DATABASE_URL }} \
+              -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
