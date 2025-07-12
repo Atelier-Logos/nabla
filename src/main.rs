@@ -10,9 +10,10 @@ use dotenvy::dotenv;
 mod config;
 mod models;
 mod routes;
-mod analysis;
+mod package;
 mod database;
 mod middleware;
+mod binary;
 
 use config::Config;
 use database::DatabasePool;
@@ -58,7 +59,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Protected routes (with auth)
     let protected_routes = Router::new()
-        .route("/analyze", post(routes::analyze_package))
+        .route("/binary", post(routes::upload_and_analyze_binary))
+        .route("/binary/:hash", axum::routing::get(routes::get_binary_analysis))
+        .route("/binary/scan-secrets", post(routes::scan_binary_secrets))
+        .route("/binary/:hash/sbom", axum::routing::get(routes::get_binary_sbom))
+        .route("/packages", post(routes::analyze_package))
         .route("/packages/:id", axum::routing::get(routes::fetch_package_analysis))
         .route_layer(auth_layer);
 

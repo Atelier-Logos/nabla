@@ -1,0 +1,34 @@
+// src/binary/mod.rs
+pub mod binary_analysis;
+pub mod sbom_generation;
+pub mod secret_scanner;
+
+pub use self::binary_analysis::analyze_binary;
+pub use self::sbom_generation::{generate_sbom, SbomFormat};
+pub use self::secret_scanner::{SecretScanner, SecretScanResult};
+
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BinaryAnalysis {
+    pub id: Uuid,
+    pub file_name: String,
+    pub format: String,
+    pub architecture: String,
+    pub languages: Vec<String>,
+    pub detected_symbols: Vec<String>,
+    pub embedded_strings: Vec<String>,
+    pub suspected_secrets: Vec<String>,
+    pub imports: Vec<String>,
+    pub exports: Vec<String>,
+    pub hash_sha256: String,
+    pub hash_blake3: Option<String>,
+    pub size_bytes: u64,
+    pub linked_libraries: Vec<String>,
+    pub static_linked: bool,
+    pub metadata: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub sbom: Option<serde_json::Value>,
+}

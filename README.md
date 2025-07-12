@@ -38,7 +38,7 @@ The following fields are **not LLM-enriched** (static analysis only):
 
 ## API Endpoints
 
-### POST /analyze
+### POST /packages
 
 Analyzes a Rust package and stores results in the database.
 

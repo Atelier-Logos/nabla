@@ -16,7 +16,7 @@ use crate::middleware::ApiKeyRecord;
 use crate::{
     AppState,
     models::{AnalyzeRequest, AnalyzeResponse, PackageAnalysis},
-    analysis::PackageAnalyzer,
+    package::PackageAnalyzer,
 };
 
 pub async fn health_check() -> ResponseJson<serde_json::Value> {
