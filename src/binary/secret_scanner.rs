@@ -131,7 +131,7 @@ impl SecretScanner {
         let text = String::from_utf8_lossy(contents);
         
         let mut secrets = Vec::new();
-        let mut total_entropy = 0.0;
+        let mut total_entropy: f64 = 0.0;
         
         // First pass: use Aho-Corasick for fast keyword detection
         let keyword_matches: Vec<_> = self.aho_corasick.find_iter(&*text).collect();
@@ -145,7 +145,7 @@ impl SecretScanner {
                     
                     // Calculate entropy for this match
                     let entropy = shannon_entropy(matched_text.as_bytes());
-                    total_entropy += entropy;
+                    total_entropy += entropy as f64;
                     
                     // Adjust confidence based on entropy
                     let entropy_factor = if entropy > 4.5 { 1.2 } else if entropy < 2.0 { 0.8 } else { 1.0 };
@@ -173,7 +173,11 @@ impl SecretScanner {
         }
 
         // Scan for high-entropy strings that might be secrets
-        secrets.extend(self.scan_high_entropy_strings(&text)?);
+        let high_entropy_secrets = self.scan_high_entropy_strings(&text)?;
+        total_entropy += high_entropy_secrets.iter()
+            .map(|s| shannon_entropy(s.matched_text.as_bytes()) as f64)
+            .sum::<f64>();
+        secrets.extend(high_entropy_secrets);
         
         // Remove duplicates and sort by confidence
         secrets.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());

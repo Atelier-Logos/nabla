@@ -21,10 +21,10 @@ pub struct SourceAnalysis {
     pub external_crates: Vec<String>,
 }
 
-pub async fn analyze(package_path: &Path, extraction_depth: &str) -> Result<SourceAnalysis> {
-    tracing::debug!("Running source analysis on {:?} with depth {}", package_path, extraction_depth);
+pub async fn analyze(package_path: &Path) -> Result<SourceAnalysis> {
+    tracing::debug!("Running source analysis on {:?}", package_path);
 
-    let mut analyzer = SourceCodeAnalyzer::new(extraction_depth);
+    let mut analyzer = SourceCodeAnalyzer::new();
     
     // Walk through all Rust source files
     for entry in WalkDir::new(package_path) {
@@ -56,7 +56,7 @@ pub async fn analyze(package_path: &Path, extraction_depth: &str) -> Result<Sour
 }
 
 struct SourceCodeAnalyzer {
-    _extraction_depth: String,
+    
     _file_contents: HashMap<String, String>,
     _analysis: SourceAnalysis,
     modules: Vec<ModuleInfo>,
@@ -107,10 +107,9 @@ struct TraitInfo {
 }
 
 impl SourceCodeAnalyzer {
-    fn new(extraction_depth: &str) -> Self {
+    fn new() -> Self {
         Self {
-            _extraction_depth: extraction_depth.to_string(),
-            _file_contents: HashMap::new(),
+                        _file_contents: HashMap::new(),
             _analysis: SourceAnalysis {
                 key_modules: JsonValue::Null,
                 important_structs: JsonValue::Null,

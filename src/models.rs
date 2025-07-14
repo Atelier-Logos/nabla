@@ -9,8 +9,6 @@ pub struct AnalyzeRequest {
     pub version: String,
     #[serde(default)]
     pub api_key: Option<String>,
-    #[serde(default)]
-    pub extraction_depth: String,
     pub cache_expires_at: Option<DateTime<Utc>>,
 }
 
@@ -26,7 +24,6 @@ pub struct AnalyzeResponse {
 pub struct PackageAnalysis {
     pub package_name: String,
     pub version: String,
-    pub extraction_depth: String,
     pub description: Option<String>,
     pub downloads: Option<i64>,
     pub repository: Option<String>,
@@ -56,6 +53,7 @@ pub struct PackageAnalysis {
     pub known_cve_references: JsonValue,
     pub external_crates_used: Vec<String>,
     pub cache_expires_at: Option<DateTime<Utc>>,
+    pub sbom: Option<JsonValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

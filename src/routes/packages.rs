@@ -17,6 +17,7 @@ use crate::{
     AppState,
     models::{AnalyzeRequest, AnalyzeResponse, PackageAnalysis},
     package::PackageAnalyzer,
+    binary::generate_package_sbom,
 };
 
 pub async fn health_check() -> ResponseJson<serde_json::Value> {
@@ -37,24 +38,9 @@ pub async fn analyze_package(
 
     let key_id = api_key.id;
 
-    // ---------------- Determine extraction depth ----------------
-    let extraction_depth = match api_key.tier.as_str() {
-        "professional" => "full",
-        "enterprise" => "deep", 
-        _ => "basic",
-    };
-
-    // Update the request's extraction_depth to match what we're using
-    request.extraction_depth = extraction_depth.to_string();
-
-    // ---------------- Determine cache expiry -------------------
     if request.cache_expires_at.is_none() {
         use chrono::{Duration, Utc};
-        let duration = match api_key.tier.as_str() {
-            "professional" => Duration::days(14),
-            "enterprise" => Duration::days(7),
-            _ => Duration::days(30),
-        };
+        let duration = Duration::days(30);
         request.cache_expires_at = Some(Utc::now() + duration);
     }
 
@@ -90,7 +76,7 @@ pub async fn analyze_package(
     };
 
     // Run the analysis
-    let analysis = match analyzer.analyze(&request, key_id, &extraction_depth).await {
+    let mut analysis = match analyzer.analyze(&request, key_id).await {
         Ok(analysis) => analysis,
         Err(e) => {
             tracing::error!("Analysis failed for {}:{}: {}", 
@@ -106,6 +92,20 @@ pub async fn analyze_package(
             ));
         }
     };
+
+    // Generate SBOM for the package
+    tracing::debug!("Generating CycloneDX SBOM for package {}:{}", analysis.package_name, analysis.version);
+    match generate_package_sbom(&analysis) {
+        Ok(sbom) => {
+            analysis.sbom = Some(serde_json::to_value(&sbom).unwrap_or(serde_json::json!({})));
+            tracing::info!("Package SBOM generation successful");
+        }
+        Err(e) => {
+            tracing::warn!("Failed to generate SBOM for package {}:{}: {}", 
+                analysis.package_name, analysis.version, e);
+            analysis.sbom = None;
+        }
+    }
 
     // Insert results into database
     let package_id = match app_state.pool.insert_package_analysis(&analysis).await {
@@ -127,11 +127,11 @@ pub async fn analyze_package(
     tracing::info!("Successfully analyzed {}:{} with ID {}", 
         request.name, request.version, package_id);
 
-    let filtered_analysis = filter_analysis_by_tier(&analysis, &api_key.tier);
+    let filtered_analysis = filter_analysis_by_plan(&analysis, &api_key.plan);
     let filtered_json = serde_json::to_value(&filtered_analysis).unwrap_or(serde_json::json!({}));
 
     // Add debug logging
-    tracing::info!("Tier: {}, Original analysis keys: {:?}", api_key.tier, 
+    tracing::info!("Plan: {}, Original analysis keys: {:?}", api_key.plan, 
         serde_json::to_value(&analysis).unwrap().as_object().map(|o| o.keys().collect::<Vec<_>>()));
     tracing::info!("Filtered analysis keys: {:?}", 
         filtered_json.as_object().map(|o| o.keys().collect::<Vec<_>>()));
@@ -153,9 +153,9 @@ pub async fn fetch_package_analysis(
 ) -> Result<ResponseJson<serde_json::Value>, StatusCode> {
     match app_state.pool.get_full_analysis(&package_id).await {
         Ok(Some(json)) => {
-            // Parse the full analysis and filter by tier
+            // Parse the full analysis and filter by plan
             if let Ok(analysis) = serde_json::from_value::<PackageAnalysis>(json.clone()) {
-                let filtered_analysis = filter_analysis_by_tier(&analysis, &api_key.tier);
+                let filtered_analysis = filter_analysis_by_plan(&analysis, &api_key.plan);
                 let filtered_json = serde_json::to_value(&filtered_analysis).unwrap_or(json);
                 Ok(ResponseJson(filtered_json))
             } else {
@@ -167,43 +167,29 @@ pub async fn fetch_package_analysis(
     }
 }
 
-fn filter_analysis_by_tier(analysis: &PackageAnalysis, tier: &str) -> PackageAnalysis {
-    match tier {
-        "basic" => {
-            // Basic: Only crate metadata
+fn filter_analysis_by_plan(analysis: &PackageAnalysis, plan: &str) -> PackageAnalysis {
+    match plan.to_lowercase().as_str() {
+        "sbom builder" => {
+            // SBOM Builder: restrict analysis to metadata + SBOM
+            // SBOM Builder: return metadata + SBOM only
             PackageAnalysis {
                 key_modules: serde_json::json!([]),
                 important_structs: serde_json::json!([]),
                 notable_functions: serde_json::json!([]),
                 traits: serde_json::json!([]),
                 api_usage_examples: serde_json::json!([]),
+                dependency_graph: serde_json::json!([]),
+                docs_quality_score: serde_json::json!([]),
                 cargo_audit_report: serde_json::json!([]),
                 unsafe_usage_locations: serde_json::json!([]),
                 known_cve_references: serde_json::json!([]),
-                docs_quality_score: serde_json::json!([]),
-                dependency_graph: serde_json::json!([]),
-                licenses: serde_json::json!([]),
-                // Keep: package_name, version, description, repository, homepage, 
-                // documentation, downloads, licenses, dependency_graph, cargo_toml
                 ..analysis.clone()
             }
         },
-        "professional" => {
-            // Professional: Metadata + LLM enrichments + interface insights + basic security
-            PackageAnalysis {
-                unsafe_usage_locations: serde_json::json!([]),
-                known_cve_references: serde_json::json!([]),
-                dependency_graph: serde_json::json!([]),
-                ..analysis.clone()
-            }
-        },
-        "enterprise" => {
-            // Enterprise: Everything including deep security analysis
+        "package intelligence" => {
+            // Package Intelligence: full analysis
             analysis.clone()
         },
-        _ => {
-            // Default to basic
-            filter_analysis_by_tier(analysis, "basic")
-        }
+        _ => analysis.clone()
     }
 } 

@@ -48,7 +48,6 @@ Analyzes a Rust package and stores results in the database.
   "name": "serde",
   "version": "1.0.0",
   "api_key": "your-api-key",
-  "extraction_depth": "deep"
 }
 ```
 

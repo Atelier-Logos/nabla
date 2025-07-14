@@ -1,4 +1,4 @@
-use super::BinaryAnalysis;
+use super::{BinaryAnalysis, extract_version_info, extract_license_info, generate_sbom};
 use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
@@ -10,13 +10,27 @@ use infer;
 use std::collections::HashSet;
 
 pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<BinaryAnalysis> {
+    tracing::info!("Starting binary analysis for '{}' ({} bytes)", file_name, contents.len());
+    
+    // Early validation for very small files
+    if contents.len() < 50 {
+        tracing::warn!("File is very small ({} bytes), likely not a binary executable", contents.len());
+        return analyze_small_file(file_name, contents);
+    }
+    
     let sha256_hash = Sha256::digest(contents);
     let blake3_hash = blake3::hash(contents);
     
-    // Detect file type
-    let file_type = infer::get(contents)
-        .map(|t| t.mime_type().to_string())
-        .unwrap_or_else(|| "application/octet-stream".to_string());
+    // Detect file type with more detailed logging
+    let detected_type = infer::get(contents);
+    let file_type = if let Some(kind) = detected_type {
+        tracing::info!("Detected file type: {} ({})", kind.mime_type(), kind.extension());
+        kind.mime_type().to_string()
+    } else {
+        tracing::debug!("Could not detect file type, using fallback");
+        // Try to detect based on magic bytes or file extension
+        detect_file_type_fallback(file_name, contents)
+    };
     
     let mut analysis = BinaryAnalysis {
         id: Uuid::new_v4(),
@@ -34,18 +48,36 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         size_bytes: contents.len() as u64,
         linked_libraries: Vec::new(),
         static_linked: false,
+        version_info: None,
+        license_info: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
         sbom: None,
     };
 
-    // Parse with goblin
-    match Object::parse(contents) {
-        Ok(obj) => {
-            match obj {
-                Object::Elf(elf) => analyze_elf(&mut analysis, &elf, contents)?,
-                Object::PE(pe) => analyze_pe(&mut analysis, &pe, contents)?,
-                Object::Mach(mach) => {
+    // Try different parsing strategies based on file type and magic bytes
+    let mut parsed_successfully = false;
+    
+    // Check for magic bytes to choose optimal parser
+    if contents.len() >= 4 {
+        match &contents[0..4] {
+            [0x7f, b'E', b'L', b'F'] => {
+                tracing::info!("ELF magic detected, using goblin ELF parser");
+                if let Ok(Object::Elf(elf)) = Object::parse(contents) {
+                    analyze_elf(&mut analysis, &elf, contents)?;
+                    parsed_successfully = true;
+                }
+            }
+            [b'M', b'Z', _, _] => {
+                tracing::info!("PE magic detected, using goblin PE parser");
+                if let Ok(Object::PE(pe)) = Object::parse(contents) {
+                    analyze_pe(&mut analysis, &pe, contents)?;
+                    parsed_successfully = true;
+                }
+            }
+            [0xfe, 0xed, 0xfa, 0xce] | [0xce, 0xfa, 0xed, 0xfe] => {
+                tracing::info!("Mach-O magic detected, using goblin Mach-O parser");
+                if let Ok(Object::Mach(mach)) = Object::parse(contents) {
                     match mach {
                         goblin::mach::Mach::Fat(_) => {
                             analysis.format = "macho-fat".to_string();
@@ -53,21 +85,95 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
                         }
                         goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho)?,
                     }
+                    parsed_successfully = true;
                 }
-                Object::Archive(_) => {
-                    analysis.format = "archive".to_string();
+            }
+            [0x00, 0x61, 0x73, 0x6d] => {
+                tracing::info!("WASM magic detected, using wasmparser");
+                if analyze_wasm(&mut analysis, contents).is_ok() {
+                    parsed_successfully = true;
                 }
-                _ => {}
+            }
+            _ => {}
+        }
+    }
+    
+    // Fallback to generic goblin parsing if magic bytes didn't work
+    if !parsed_successfully {
+        tracing::debug!("No specific magic bytes found, attempting generic goblin parsing...");
+        match Object::parse(contents) {
+            Ok(obj) => {
+                tracing::info!("Successfully parsed with goblin (generic)");
+                match obj {
+                    Object::Elf(elf) => {
+                        tracing::info!("Detected ELF binary (generic)");
+                        analyze_elf(&mut analysis, &elf, contents)?;
+                        parsed_successfully = true;
+                    }
+                    Object::PE(pe) => {
+                        tracing::info!("Detected PE binary (generic)");
+                        analyze_pe(&mut analysis, &pe, contents)?;
+                        parsed_successfully = true;
+                    }
+                    Object::Mach(mach) => {
+                        tracing::info!("Detected Mach-O binary (generic)");
+                        match mach {
+                            goblin::mach::Mach::Fat(_) => {
+                                analysis.format = "macho-fat".to_string();
+                                analysis.architecture = "multi".to_string();
+                            }
+                            goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho)?,
+                        }
+                        parsed_successfully = true;
+                    }
+                    Object::Archive(_) => {
+                        tracing::info!("Detected archive");
+                        analysis.format = "archive".to_string();
+                        parsed_successfully = true;
+                    }
+                    _ => {
+                        tracing::debug!("Unknown goblin object type");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Goblin parsing failed: {}, trying WebAssembly", e);
+                // Try WebAssembly parsing
+                if analyze_wasm(&mut analysis, contents).is_ok() {
+                    tracing::info!("Successfully parsed as WebAssembly");
+                    parsed_successfully = true;
+                }
             }
         }
-        Err(_) => {
-            // Try WebAssembly parsing
-            if let Ok(_) = analyze_wasm(&mut analysis, contents) {
-                // WASM analysis succeeded
-            } else {
-                // Fall back to generic binary analysis
-                analyze_unknown_binary(&mut analysis, contents)?;
-            }
+    }
+    
+    // Final fallback
+    if !parsed_successfully {
+        tracing::info!("All specialized parsers failed, using generic analysis");
+        analyze_unknown_binary(&mut analysis, contents)?;
+    } else {
+        tracing::info!("Successfully analyzed {} as {}", file_name, analysis.format);
+    }
+
+    // Extract version and license information
+    tracing::debug!("Extracting version and license metadata");
+    analysis.version_info = Some(extract_version_info(contents, &analysis.embedded_strings, &analysis.format));
+    analysis.license_info = Some(extract_license_info(&analysis.embedded_strings));
+    
+    tracing::info!("Metadata extraction complete: version_confidence={:.2}, license_confidence={:.2}", 
+                   analysis.version_info.as_ref().map(|v| v.confidence).unwrap_or(0.0),
+                   analysis.license_info.as_ref().map(|l| l.confidence).unwrap_or(0.0));
+
+    // Generate SBOM
+    tracing::debug!("Generating CycloneDX SBOM");
+    match generate_sbom(&analysis) {
+        Ok(sbom) => {
+            analysis.sbom = Some(sbom);
+            tracing::info!("SBOM generation successful");
+        }
+        Err(e) => {
+            tracing::warn!("SBOM generation failed: {}", e);
+            // Continue without SBOM rather than failing the whole analysis
         }
     }
 
@@ -108,6 +214,8 @@ fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> any
     // Extract libraries
     for lib in &elf.libraries {
         analysis.linked_libraries.push(lib.to_string());
+        // Store library name for regex-based version extraction later
+        analysis.embedded_strings.push(lib.to_string());
     }
 
     // Determine if statically linked
@@ -150,8 +258,12 @@ fn analyze_pe(analysis: &mut BinaryAnalysis, pe: &PE, _contents: &[u8]) -> anyho
     // Extract imports
     for import in &pe.imports {
         analysis.imports.push(import.name.to_string());
+        // Add import name to embedded strings for version extraction heuristics
+        analysis.embedded_strings.push(import.name.to_string());
         if !analysis.linked_libraries.contains(&import.dll.to_string()) {
             analysis.linked_libraries.push(import.dll.to_string());
+            // Include DLL name in embedded strings so version like "vcruntime140.dll" can be parsed
+            analysis.embedded_strings.push(import.dll.to_string());
         }
     }
 
@@ -184,6 +296,8 @@ fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO) -> anyhow::Result
     // Extract libraries
     for lib in &macho.libs {
         analysis.linked_libraries.push(lib.to_string());
+        // Store library name for regex-based version extraction later
+        analysis.embedded_strings.push(lib.to_string());
     }
 
     analysis.static_linked = macho.libs.is_empty();
@@ -192,28 +306,94 @@ fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO) -> anyhow::Result
 }
 
 fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
-    analysis.format = "wasm".to_string();
+    tracing::info!("Starting WASM analysis");
+    analysis.format = "application/wasm".to_string();
     analysis.architecture = "wasm32".to_string();
+    analysis.languages.push("WebAssembly".to_string());
     
     let parser = Parser::new(0);
     let mut imports = HashSet::new();
     let mut exports = HashSet::new();
+    let mut function_count = 0;
+    let mut memory_info = Vec::new();
+    let mut table_info = Vec::new();
     
     for payload in parser.parse_all(contents) {
-        match payload? {
-            Payload::ImportSection(reader) => {
-                for import in reader {
-                    let import = import?;
-                    imports.insert(format!("{}::{}", import.module, import.name));
+        use wasmparser::Payload as WasmPayload;
+        match payload {
+            Ok(payload) => {
+                match payload {
+                    Payload::Version { num, .. } => {
+                        tracing::debug!("WASM version: {}", num);
+                    }
+                    Payload::ImportSection(reader) => {
+                        for import in reader {
+                            match import {
+                                Ok(import) => {
+                                    let import_name = format!("{}::{}", import.module, import.name);
+                                    imports.insert(import_name);
+                                    tracing::debug!("Found import: {}::{}", import.module, import.name);
+                                }
+                                Err(e) => tracing::warn!("Failed to parse import: {}", e),
+                            }
+                        }
+                    }
+                    Payload::ExportSection(reader) => {
+                        for export in reader {
+                            match export {
+                                Ok(export) => {
+                                    exports.insert(export.name.to_string());
+                                    tracing::debug!("Found export: {}", export.name);
+                                }
+                                Err(e) => tracing::warn!("Failed to parse export: {}", e),
+                            }
+                        }
+                    }
+                    Payload::FunctionSection(reader) => {
+                        function_count = reader.count();
+                        tracing::debug!("Function count: {}", function_count);
+                    }
+                    Payload::MemorySection(reader) => {
+                        for memory in reader {
+                            match memory {
+                                Ok(memory) => {
+                                    memory_info.push(format!("initial: {}, maximum: {:?}", 
+                                                           memory.initial, memory.maximum));
+                                }
+                                Err(e) => tracing::warn!("Failed to parse memory: {}", e),
+                            }
+                        }
+                    }
+                    Payload::TableSection(reader) => {
+                        for table in reader {
+                            match table {
+                                Ok(table) => {
+                                    table_info.push(format!("element_type: {:?}, initial: {}, maximum: {:?}", 
+                                                           table.ty.element_type, table.ty.initial, table.ty.maximum));
+                                }
+                                Err(e) => tracing::warn!("Failed to parse table: {}", e),
+                            }
+                        }
+                    }
+                    WasmPayload::CustomSection(custom) => {
+                        if let Ok(bytes_str) = std::str::from_utf8(custom.data()) {
+                            for s in extract_strings(bytes_str.as_bytes()) {
+                                analysis.embedded_strings.push(s);
+                            }
+                        }
+                    }
+                    Payload::TypeSection(reader) => {
+                        tracing::debug!("Type section with {} types", reader.count());
+                    }
+                    _ => {
+                        // tracing::debug!("Skipping WASM section: {:?}", payload);
+                    }
                 }
             }
-            Payload::ExportSection(reader) => {
-                for export in reader {
-                    let export = export?;
-                    exports.insert(export.name.to_string());
-                }
+            Err(e) => {
+                tracing::warn!("WASM parsing error: {}", e);
+                break;
             }
-            _ => {}
         }
     }
     
@@ -221,38 +401,215 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
     analysis.exports = exports.into_iter().collect();
     analysis.static_linked = true; // WASM modules are self-contained
     
+    // Add WASM-specific metadata
+    analysis.metadata = serde_json::json!({
+        "wasm_version": "1.0",
+        "function_count": function_count,
+        "memory_sections": memory_info,
+        "table_sections": table_info,
+        "import_count": analysis.imports.len(),
+        "export_count": analysis.exports.len(),
+        "analysis_type": "wasm"
+    });
+    
+    tracing::info!("WASM analysis complete: {} imports, {} exports, {} functions", 
+                   analysis.imports.len(), analysis.exports.len(), function_count);
+    
     Ok(())
 }
 
-fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, _contents: &[u8]) -> anyhow::Result<()> {
-    analysis.format = "unknown".to_string();
+fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
+    tracing::debug!("Performing generic binary analysis");
+    
+    // Try to determine if it's a text file
+    let text_ratio = contents.iter()
+        .filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace())
+        .count() as f64 / contents.len() as f64;
+    
+    if text_ratio > 0.7 {
+        analysis.format = "text".to_string();
+        tracing::debug!("Detected text file ({}% ASCII)", (text_ratio * 100.0) as u32);
+        
+        // Try to extract more information from text files
+        let text = String::from_utf8_lossy(contents);
+        {
+            // Look for shebang
+            if text.starts_with("#!") {
+                analysis.format = "script".to_string();
+                analysis.languages.push("script".to_string());
+            }
+            
+            // Look for common programming patterns
+            if text.contains("function") || text.contains("def ") {
+                analysis.languages.push("script".to_string());
+            }
+            if text.contains("#include") || text.contains("int main") {
+                analysis.languages.push("C/C++".to_string());
+            }
+            if text.contains("pub fn") || text.contains("fn main") {
+                analysis.languages.push("Rust".to_string());
+            }
+        }
+    } else {
+        analysis.format = "binary".to_string();
+        tracing::debug!("Detected binary file ({}% ASCII)", (text_ratio * 100.0) as u32);
+    }
+    
     analysis.architecture = "unknown".to_string();
     
-    // Could add more heuristics here for unknown formats
+    // Add some basic metadata
+    analysis.metadata = serde_json::json!({
+        "ascii_ratio": text_ratio,
+        "analysis_type": "generic"
+    });
     
     Ok(())
+}
+
+fn analyze_small_file(file_name: &str, contents: &[u8]) -> anyhow::Result<BinaryAnalysis> {
+    tracing::info!("Analyzing small file '{}' ({} bytes)", file_name, contents.len());
+    
+    let sha256_hash = Sha256::digest(contents);
+    let blake3_hash = blake3::hash(contents);
+    
+    // For small files, just extract strings and basic info
+    let strings = extract_strings(contents);
+    let text_content = String::from_utf8_lossy(contents);
+    
+    // Check if it's mostly text
+    let text_ratio = contents.iter()
+        .filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace())
+        .count() as f64 / contents.len() as f64;
+    
+    let format = if text_ratio > 0.8 {
+        "text/plain"
+    } else {
+        "application/octet-stream"
+    }.to_string();
+    
+    // Try to determine what kind of small file this is
+    let mut languages = Vec::new();
+    let mut analysis_notes = Vec::new();
+    
+    if strings.iter().any(|s| s.ends_with(".wasm")) {
+        analysis_notes.push("Contains WASM module reference".to_string());
+        languages.push("WebAssembly".to_string());
+    }
+    
+    if strings.iter().any(|s| s.ends_with(".dll") || s.ends_with(".exe")) {
+        analysis_notes.push("Contains Windows executable reference".to_string());
+    }
+    
+    if text_content.starts_with("#!") {
+        languages.push("Script".to_string());
+        analysis_notes.push("Shell script or executable script".to_string());
+    }
+    
+    let metadata = serde_json::json!({
+        "ascii_ratio": text_ratio,
+        "analysis_type": "small_file",
+        "notes": analysis_notes,
+        "content_preview": text_content.chars().take(50).collect::<String>()
+    });
+    
+    let version_info = extract_version_info(contents, &strings, &format);
+    let license_info = extract_license_info(&strings);
+    
+    Ok(BinaryAnalysis {
+        id: Uuid::new_v4(),
+        file_name: file_name.to_string(),
+        format,
+        architecture: "n/a".to_string(),
+        languages,
+        detected_symbols: Vec::new(),
+        embedded_strings: strings,
+        suspected_secrets: Vec::new(),
+        imports: Vec::new(),
+        exports: Vec::new(),
+        hash_sha256: format!("{:x}", sha256_hash),
+        hash_blake3: Some(blake3_hash.to_hex().to_string()),
+        size_bytes: contents.len() as u64,
+        linked_libraries: Vec::new(),
+        static_linked: false,
+        version_info: Some(version_info),
+        license_info: Some(license_info),
+        metadata,
+        created_at: Utc::now(),
+        sbom: None,
+    })
+}
+
+fn detect_file_type_fallback(file_name: &str, contents: &[u8]) -> String {
+    // Check for common magic bytes
+    if contents.len() >= 4 {
+        match &contents[0..4] {
+            [0x7f, b'E', b'L', b'F'] => return "application/x-elf".to_string(),
+            [b'M', b'Z', _, _] => return "application/x-msdownload".to_string(), // PE
+            [0xfe, 0xed, 0xfa, 0xce] | [0xce, 0xfa, 0xed, 0xfe] => return "application/x-mach-binary".to_string(),
+            [0x00, 0x61, 0x73, 0x6d] => return "application/wasm".to_string(), // WASM
+            _ => {}
+        }
+    }
+    
+    // Check file extension
+    if let Some(ext) = file_name.split('.').last() {
+        match ext.to_lowercase().as_str() {
+            "exe" | "dll" => return "application/x-msdownload".to_string(),
+            "so" | "a" => return "application/x-sharedlib".to_string(),
+            "wasm" => return "application/wasm".to_string(),
+            "bin" => return "application/octet-stream".to_string(),
+            _ => {}
+        }
+    }
+    
+    "application/octet-stream".to_string()
 }
 
 fn extract_strings(contents: &[u8]) -> Vec<String> {
     let mut strings = Vec::new();
     let mut current_string = Vec::new();
     
+    tracing::debug!("Extracting strings from {} bytes", contents.len());
+    
     for &byte in contents {
-        if byte.is_ascii_graphic() || byte == b' ' {
+        if byte.is_ascii_graphic() || byte == b' ' || byte == b'\t' {
             current_string.push(byte);
         } else {
-            if current_string.len() >= 4 { // Minimum string length
+            if current_string.len() >= 3 { // Reduced minimum for small files
                 if let Ok(s) = String::from_utf8(current_string.clone()) {
-                    strings.push(s);
+                    // Filter out very common/useless strings
+                    if !s.trim().is_empty() && !is_junk_string(&s) {
+                        strings.push(s.trim().to_string());
+                    }
                 }
             }
             current_string.clear();
         }
     }
     
-    // Don't return too many strings
-    strings.truncate(100);
+    // Process any remaining string
+    if current_string.len() >= 3 {
+        if let Ok(s) = String::from_utf8(current_string) {
+            if !s.trim().is_empty() && !is_junk_string(&s) {
+                strings.push(s.trim().to_string());
+            }
+        }
+    }
+    
+    // Deduplicate and limit
+    strings.sort();
+    strings.dedup();
+    strings.truncate(50);
+    
+    tracing::debug!("Extracted {} strings", strings.len());
     strings
+}
+
+fn is_junk_string(s: &str) -> bool {
+    // Filter out strings that are likely padding or noise
+    s.chars().all(|c| c == '\0' || c == ' ') ||
+    s.len() > 200 || // Very long strings are often noise
+    s.chars().all(|c| c.is_ascii_punctuation())
 }
 
 #[cfg(test)]

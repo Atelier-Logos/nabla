@@ -9,6 +9,8 @@ use axum::{
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use serde_json::json;
+use once_cell::sync::Lazy;
+use dashmap::DashMap;
 
 use crate::AppState;
 
@@ -17,10 +19,8 @@ use crate::AppState;
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct ApiKeyRecord {
     pub id: Uuid,
-    pub tier: String,
+    pub plan: String,
     pub rate_limit_per_minute: Option<i32>,
-    pub monthly_quota: Option<i32>,
-    pub current_usage: Option<i32>,
     pub is_active: Option<bool>,
     pub expires_at: Option<DateTime<Utc>>,
 }
@@ -43,14 +43,10 @@ pub async fn validate_api_key(
     // ------------------------------------------------------------
     // 2. Lookup key in database
     // ------------------------------------------------------------
-    let key_record = sqlx::query_as!(
-        ApiKeyRecord,
-        r#"SELECT id, tier, rate_limit_per_minute, monthly_quota, current_usage,
-                  is_active, expires_at
-           FROM api_keys
-           WHERE api_key = $1"#,
-        raw_key
+    let key_record = sqlx::query_as::<_, ApiKeyRecord>(
+        r#"SELECT id, plan, rate_limit_per_minute, is_active, expires_at FROM api_keys WHERE api_key = $1"#
     )
+    .bind(raw_key)
     .fetch_optional(&state.pool.pool)
     .await;
 
@@ -79,10 +75,23 @@ pub async fn validate_api_key(
         }
     }
 
-    if let (Some(quota), Some(usage)) = (record.monthly_quota, record.current_usage) {
-        if usage >= quota {
-            return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error": "quota exceeded"}))).into_response();
+    // ------------------------------------------------------------
+    // Rate limiting based on `rate_limit_per_minute`
+    // ------------------------------------------------------------
+    if let Some(limit) = record.rate_limit_per_minute {
+        let now = Utc::now();
+        let mut entry = RATE_LIMIT_MAP
+            .entry(record.id)
+            .or_insert((0u32, now));
+        let (ref mut count, ref mut ts) = *entry;
+        if now.signed_duration_since(*ts).num_seconds() >= 60 {
+            *count = 0;
+            *ts = now;
         }
+        if *count >= limit as u32 {
+            return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error": "rate limit exceeded"}))).into_response();
+        }
+        *count += 1;
     }
 
     // TODO: Rate-limit per minute if `rate_limit_per_minute` is set.
@@ -97,24 +106,12 @@ pub async fn validate_api_key(
     // ------------------------------------------------------------
     let response = next.run(req).await;
 
-    // ------------------------------------------------------------
-    // 6. On successful response, increment usage counter
-    // ------------------------------------------------------------
-    if response.status().is_success() {
-        // Ignore errors – they are logged and do not affect the response.
-        if let Err(e) = sqlx::query!(
-            "UPDATE api_keys SET current_usage = current_usage + 1 WHERE id = $1",
-            record.id
-        )
-        .execute(&state.pool.pool)
-        .await
-        {
-            tracing::error!(error = %e, "failed to increment current_usage for api key");
-        }
-    }
+
 
     response
 }
+
+static RATE_LIMIT_MAP: Lazy<DashMap<Uuid, (u32, DateTime<Utc>)>> = Lazy::new(|| DashMap::new());
 
 // ------------------------------------------------------------
 // Helper — extract API key from headers or query string

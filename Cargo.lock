@@ -567,6 +567,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if 1.0.1",
+ "hashbrown 0.14.5",
+ "lock_api 0.4.13",
+ "once_cell",
+ "parking_lot_core 0.9.11",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,6 +747,7 @@ dependencies = [
  "blake3",
  "cargo_metadata",
  "chrono",
+ "dashmap",
  "dotenvy",
  "entropy",
  "flate2",
@@ -743,6 +757,7 @@ dependencies = [
  "infer",
  "json",
  "object 0.34.0",
+ "once_cell",
  "proc-macro2",
  "quote",
  "regex",

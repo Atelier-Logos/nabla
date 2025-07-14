@@ -43,8 +43,8 @@ impl PackageAnalyzer {
         })
     }
 
-    pub async fn analyze(&self, request: &AnalyzeRequest, key_id: uuid::Uuid, extraction_depth: &str) -> Result<PackageAnalysis> {
-        tracing::info!("Starting analysis for {}:{} with depth: {}", request.name, request.version, extraction_depth);
+    pub async fn analyze(&self, request: &AnalyzeRequest, key_id: uuid::Uuid) -> Result<PackageAnalysis> {
+        tracing::info!("Starting analysis for {}:{}", request.name, request.version);
 
         // Always run basic analyses
         let (
@@ -73,8 +73,7 @@ impl PackageAnalyzer {
         let mut analysis = PackageAnalysis {
             package_name: request.name.clone(),
             version: request.version.clone(),
-            extraction_depth: request.extraction_depth.clone(),
-            description: metadata_result.description,
+                        description: metadata_result.description,
             downloads: crate_info.downloads,
             repository: metadata_result.repository,
             homepage: metadata_result.homepage,
@@ -104,11 +103,12 @@ impl PackageAnalyzer {
             known_cve_references: serde_json::json!([]),
             external_crates_used: Vec::new(),
             source: serde_json::json!({}),
+            sbom: Some(serde_json::json!({})),
         };
 
         // Run deep analyses only for non-basic tiers
-        if extraction_depth != "basic" {
-            tracing::info!("Running deep analysis for depth: {}", extraction_depth);
+        // Always run full analysis
+            tracing::info!("Running deep analysis");
             
             let (
                 audit_result,
@@ -117,7 +117,7 @@ impl PackageAnalyzer {
                 unsafe_analysis,
             ) = tokio::try_join!(
                 cargo_audit::analyze(&self.package_path),
-                source_analyzer::analyze(&self.package_path, &request.extraction_depth),
+                source_analyzer::analyze(&self.package_path),
                 documentation::analyze(&self.package_path),
                 unsafe_detector::analyze(&self.package_path),
             )?;
@@ -139,15 +139,13 @@ impl PackageAnalyzer {
             analysis.known_cve_references = audit_result.cve_references;
             analysis.external_crates_used = source_analysis.external_crates;
             analysis.source = source_analysis.source_stats;
-        }
 
         // Run LLM enrichment for professional and enterprise tiers
-        if extraction_depth == "full" || extraction_depth == "deep" {
-            tracing::info!("Running LLM enrichment for depth: {}", extraction_depth);
+        // Run LLM enrichment regardless of previous depth
+            tracing::info!("Running LLM enrichment");
             llm_enricher::enrich_analysis(&mut analysis).await.ok();
-        }
 
-        tracing::info!("Analysis completed for {}:{} with depth: {}", request.name, request.version, extraction_depth);
+        tracing::info!("Analysis completed for {}:{}", request.name, request.version);
         Ok(analysis)
     }
 

@@ -55,7 +55,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Public routes (no auth)
     let public_routes = Router::new()
-        .route("/health", axum::routing::get(routes::health_check));
+        .route("/health", axum::routing::get(routes::health_check))
+        .route("/debug/multipart", post(routes::debug_multipart));
 
     // Protected routes (with auth)
     let protected_routes = Router::new()
@@ -63,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/binary/:hash", axum::routing::get(routes::get_binary_analysis))
         .route("/binary/scan-secrets", post(routes::scan_binary_secrets))
         .route("/binary/:hash/sbom", axum::routing::get(routes::get_binary_sbom))
+        // TODO: Add audit route
         .route("/packages", post(routes::analyze_package))
         .route("/packages/:id", axum::routing::get(routes::fetch_package_analysis))
         .route_layer(auth_layer);

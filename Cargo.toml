@@ -86,7 +86,11 @@ flate2 = "1.0"
 tar = "0.4"
 
 # Additional dependencies for url crate
-url = "2.4" 
+url = "2.4"
+
+# Concurrency utilities for in-memory rate limiting
+once_cell = "1.19"
+dashmap = "5.5" 
 
 # Additional dependencies for base64ct
 base64ct = "=1.7.3" 

@@ -9,7 +9,7 @@ use sqlx::Row;
 use uuid::Uuid;
 use crate::{AppState, binary::{
     analyze_binary, BinaryAnalysis, SecretScanner, SecretScanResult, 
-    generate_sbom, SbomFormat
+    generate_sbom
 }};
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +37,7 @@ pub async fn upload_and_analyze_binary(
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
     let mut contents = vec![];
+    let mut found_file = false;
 
     // Extract file from multipart form
     while let Some(field) = multipart.next_field().await.map_err(|e| {
@@ -48,18 +49,45 @@ pub async fn upload_and_analyze_binary(
             }),
         )
     })? {
-        if let Some(name) = field.file_name().map(|s| s.to_string()) {
-            file_name = name;
+        let field_name = field.name().unwrap_or("unknown_field").to_string();
+        tracing::debug!("Processing multipart field: '{}'", field_name);
+        
+        // Get filename if present
+        let field_filename = field.file_name().map(|s| s.to_string());
+        if let Some(name) = &field_filename {
+            file_name = name.clone();
+            tracing::info!("Found filename in multipart: '{}'", file_name);
         }
-        contents = field.bytes().await.map_err(|e| {
+        
+        // Read field contents
+        let field_contents = field.bytes().await.map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "read_error".to_string(),
-                    message: format!("Failed to read file contents: {}", e),
+                    message: format!("Failed to read field '{}' contents: {}", field_name, e),
                 }),
             )
         })?.to_vec();
+        
+        tracing::debug!("Field '{}': {} bytes, filename: {:?}", 
+                       field_name, field_contents.len(), field_filename);
+        
+        // Only use content from file fields, not text fields
+        if !field_contents.is_empty() && (
+            field_name == "file" || 
+            field_name == "binary" || 
+            field_filename.is_some() ||
+            field_contents.len() > 10 // Assume larger content is the file
+        ) {
+            contents = field_contents;
+            found_file = true;
+            tracing::info!("Using {} bytes from field '{}' as file content", contents.len(), field_name);
+        }
+    }
+
+    if !found_file {
+        tracing::warn!("No file field found in multipart form");
     }
 
     if contents.is_empty() {
@@ -72,8 +100,12 @@ pub async fn upload_and_analyze_binary(
         ));
     }
 
+    // Log the received file info
+    tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
+    
     // Analyze the binary
     let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -82,6 +114,9 @@ pub async fn upload_and_analyze_binary(
             }),
         )
     })?;
+    
+    tracing::info!("Analysis completed for {}: format={}, arch={}, {} strings", 
+                   file_name, analysis.format, analysis.architecture, analysis.embedded_strings.len());
 
     // Store in database (simplified for now, you'd want proper DB schema)
     let query = "INSERT INTO binaries (id, file_name, hash_sha256, analysis_data, contents, created_at) 
@@ -233,7 +268,7 @@ pub async fn scan_binary_secrets(
 pub async fn get_binary_sbom(
     State(state): State<AppState>,
     Path(hash): Path<String>,
-    Query(params): Query<SbomQuery>,
+    Query(_params): Query<SbomQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     // First get the binary analysis
     let query = "SELECT analysis_data FROM binaries WHERE hash_sha256 = $1";
@@ -273,22 +308,8 @@ pub async fn get_binary_sbom(
         )
     })?;
 
-    // Determine SBOM format
-    let format = match params.format.as_deref() {
-        Some("spdx") => SbomFormat::Spdx,
-        Some("cyclonedx") => SbomFormat::CycloneDx,
-        Some(other) => return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "invalid_format".to_string(),
-                message: format!("Invalid SBOM format: {}. Use 'spdx' or 'cyclonedx'", other),
-            }),
-        )),
-        None => SbomFormat::Spdx, // Default to SPDX
-    };
-
-    // Generate SBOM
-    let sbom = generate_sbom(&analysis, format).map_err(|e| {
+    // Generate SBOM (currently only CycloneDX format supported)
+    let sbom = generate_sbom(&analysis).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

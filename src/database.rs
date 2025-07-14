@@ -43,23 +43,22 @@ impl DatabasePool {
         sqlx::query(
             r#"
             INSERT INTO packages (
-                id, package_name, version, extraction_depth, description, downloads,
+                id, package_name, version, description, downloads,
                 repository, homepage, documentation, key_modules, important_structs,
                 notable_functions, traits, features, api_usage_examples, dependency_graph,
                 updated_at, cargo_toml, source, docs_quality_score, last_git_commit,
                 key_id, publish_date, cargo_audit_report, unsafe_usage_locations,
                 uses_unsafe, "license(s)", macro_usage, build_rs_present, public_api_surface,
-                known_cve_references, external_crates_used, cache_expires_at
+                known_cve_references, external_crates_used, cache_expires_at, sbom
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33
+                $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34
             )
             "#
         )
         .bind(&id)
         .bind(&package.package_name)
         .bind(&package.version)
-        .bind(&package.extraction_depth)
         .bind(&package.description)
         .bind(&package.downloads)
         .bind(&package.repository)
@@ -89,6 +88,7 @@ impl DatabasePool {
         .bind(&package.known_cve_references)
         .bind(&package.external_crates_used)
         .bind(&package.cache_expires_at)
+        .bind(&package.sbom)
         .execute(&self.pool)
         .await?;
 
