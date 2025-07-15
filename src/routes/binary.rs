@@ -3,11 +3,12 @@ use axum::{
     extract::{Multipart, State, Path, Query},
     response::Json,
     http::StatusCode,
+    Extension,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
-use crate::{AppState, binary::{
+use crate::{AppState, middleware::ApiKeyRecord, binary::{
     analyze_binary, BinaryAnalysis, SecretScanner, SecretScanResult, 
     generate_sbom
 }};
@@ -33,6 +34,7 @@ pub struct ErrorResponse {
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
     State(state): State<AppState>,
+    Extension(api_key): Extension<crate::middleware::ApiKeyRecord>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
@@ -119,8 +121,8 @@ pub async fn upload_and_analyze_binary(
                    file_name, analysis.format, analysis.architecture, analysis.embedded_strings.len());
 
     // Store in database (simplified for now, you'd want proper DB schema)
-    let query = "INSERT INTO binaries (id, file_name, hash_sha256, analysis_data, contents, created_at) 
-                 VALUES ($1, $2, $3, $4, $5, $6)";
+    let query = "INSERT INTO binaries (id, file_name, hash_sha256, analysis_data, contents, created_at, key_id) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)";
     
     sqlx::query(query)
         .bind(&analysis.id)
@@ -137,6 +139,7 @@ pub async fn upload_and_analyze_binary(
         })?)
         .bind(&contents)
         .bind(&analysis.created_at)
+        .bind(&api_key.id)
         .execute(&state.pool.pool)
         .await
         .map_err(|e| {
