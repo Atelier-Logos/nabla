@@ -22,7 +22,6 @@ pub struct ApiKeyRecord {
     pub plan: String,
     pub rate_limit_per_minute: Option<i32>,
     pub is_active: Option<bool>,
-    pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// Middleware that extracts an `X-API-KEY` (or bearer/query) credential, checks it
@@ -44,9 +43,10 @@ pub async fn validate_api_key(
     // 2. Lookup key in database
     // ------------------------------------------------------------
     let key_record = sqlx::query_as::<_, ApiKeyRecord>(
-        r#"SELECT id, plan, rate_limit_per_minute, is_active, expires_at FROM api_keys WHERE api_key = $1"#
+        r#"SELECT id, plan, rate_limit_per_minute, is_active FROM api_keys WHERE api_key = $1"#
     )
     .bind(raw_key)
+    .persistent(false) // avoid cached plan mismatch if column list changes
     .fetch_optional(&state.pool.pool)
     .await;
 
@@ -67,12 +67,6 @@ pub async fn validate_api_key(
     // ------------------------------------------------------------
     if record.is_active == Some(false) {
         return (StatusCode::FORBIDDEN, Json(json!({"error": "key inactive"}))).into_response();
-    }
-
-    if let Some(exp) = record.expires_at {
-        if exp < Utc::now() {
-            return (StatusCode::FORBIDDEN, Json(json!({"error": "key expired"}))).into_response();
-        }
     }
 
     // ------------------------------------------------------------

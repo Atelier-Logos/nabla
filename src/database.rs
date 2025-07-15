@@ -48,11 +48,11 @@ impl DatabasePool {
                 notable_functions, traits, features, api_usage_examples, dependency_graph,
                 updated_at, cargo_toml, source, docs_quality_score, last_git_commit,
                 key_id, publish_date, cargo_audit_report, unsafe_usage_locations,
-                uses_unsafe, "license(s)", macro_usage, build_rs_present, public_api_surface,
+                uses_unsafe, "licenses", macro_usage, build_rs_present, public_api_surface,
                 known_cve_references, external_crates_used, cache_expires_at, sbom
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34
+                $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33
             )
             "#
         )
