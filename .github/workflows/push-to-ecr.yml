@@ -39,7 +39,12 @@
             PORT: ${{ secrets.PORT }}
             OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           run: |
+            # Build and tag both with unique tag and 'latest'
             docker build \
               --build-arg DATABASE_URL=${{ secrets.DATABASE_URL }} \
-              -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+              -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+              -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+
+            # Push both tags
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
