@@ -1,21 +1,21 @@
 ![](./public/banner.png)
 
-# Ferropipe 🦀
+# The Atelier Logos API Platform
 
 [![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/ferropipe-audit)
 [![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-purple?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/)
 
-A comprehensive Rust crate intelligence API built with Axum, OpenAI, and tools such as `rust-audit` that provides detailed LLM enriched insights into internal security posture and structural implementation details. 
+A comprehensive dependency intelligence, SBOM generation, binary analysis API platform built with Rust, Axum, and Goblin that provides an interface for extracting deep insights into the security and implementation of Rust packages and binaries of various types. 
 
 ## Features
 
-- **Security Analysis**: Integration with `cargo-audit` for vulnerability scanning *(not LLM-enriched)*
-- **License Analysis**: Detection and analysis of licenses using `cargo-license` *(not LLM-enriched)*
-- **Source Code Analysis**: Using `syn` to extract structural information *(partially LLM-enriched, see below)*
-- **Unsafe Code Detection**: Locates and reports unsafe code blocks *(not LLM-enriched)*
-- **Documentation Analysis**: Evaluates documentation coverage and quality *(partially LLM-enriched)*
-- **Git Analysis**: Extracts repository history and commit information *(not LLM-enriched)*
+- **Security Insights**: Scan Rust crates for vulnerabilities and unsafe code
+- **License Analysis**: Detection and analysis of licenses using `cargo-license`
+- **Source Code Analysis**: Using `syn` to extract structural information
+- **Binary Analysis**: Using `goblin` to extract structural information
+- **Documentation Analysis**: Evaluates documentation coverage and quality
+- **SBOM Generation**: Generates Software Bill of Materials (SBOM)
 - **API Integration**: RESTful API for integration with any platform
 - **Database Storage**: Full analysis results stored in PostgreSQL
 
@@ -68,6 +68,37 @@ Analyzes a Rust package and stores results in the database.
 }
 ```
 
+### GET /binary
+
+Analyzes a binary and stores results in the database.
+
+**Request Body:**
+```json
+{
+  "path": "/path/to/binary",
+  "api_key": "your-api-key",
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "binary_id": "uuid-of-analysis",
+  "message": "Binary analyzed successfully",
+  "enriched_fields": [
+    "module_descriptions",
+    "struct_descriptions",
+    "function_descriptions",
+    "trait_descriptions",
+    "usage_examples",
+    "documentation_summaries"
+  ]
+}
+```
+
+**Note:** You can find documentation for other endpoints at the [Platform Docs](https://docs.atelierlogos.studio).
+
 ### GET /health
 
 Health check endpoint.
@@ -102,6 +133,10 @@ The API extracts and stores the following information:
 - PostgreSQL database (or Supabase)
 - `cargo-audit` (automatically installed)
 - `cargo-license` (automatically installed)
+- `goblin` (automatically installed)
+- `syn` (automatically installed)
+- `git2` (automatically installed)
+- `sqlx` (automatically installed)
 
 ### Environment Variables
 
@@ -152,6 +187,16 @@ Manages API authentication:
 - API key strings
 - Key names and status
 
+### binary table
+
+Stores complete analysis results with fields for:
+- Binary metadata (path, size, etc.) *(not LLM-enriched)*
+- Structural analysis (modules, structs, functions, traits) *(LLM-enriched: descriptions, summaries, usage)*
+- Security analysis (audit reports, unsafe usage, CVEs) *(not LLM-enriched)*
+- Documentation metrics *(LLM-enriched: summaries)*
+- Git information *(not LLM-enriched)*
+- License data *(not LLM-enriched)*
+
 ## Integration
 
 ## Tools Integration
@@ -186,4 +231,4 @@ Manages API authentication:
 
 ## License
 
-This project is licensed under the AGPLv3 License - see the LICENSE file for details.
+This project is licensed under the Functional Source License - see the LICENSE file for details.
