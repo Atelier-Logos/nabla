@@ -1,6 +1,6 @@
 ![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
 
-# Nabla - A fair-source SAST/SCA API for calculating your apps SSCS gradients
+# Nabla - A fair-source SAST/SCA API for calculating your SSCS gradients
 
 > The nabla is used in vector calculus as part of three distinct differential operators: the gradient (∇), the divergence (∇⋅), and the curl (∇×)
 
