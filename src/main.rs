@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
     let protected_routes = Router::new()
         .route("/binary/analyze", post(routes::upload_and_analyze_binary))
         .route("/binary/diff", post(routes::diff_binaries))
+        .route("/binary/attest", post(binary::attest_binary))
         .route("/binary/check-cves", post(routes::check_cve))
         .route_layer(auth_layer);
 

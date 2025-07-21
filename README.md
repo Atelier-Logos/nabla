@@ -1,103 +1,238 @@
 ![](./public/banner.png)
 
-# The Atelier Logos API Platform
+# Nabla - A fair-source SAST/SCA API for calculating your apps SSCS gradients
 
-[![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/nabla)
-[![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-purple?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/)
+> The nabla is used in vector calculus as part of three distinct differential operators: the gradient (∇), the divergence (∇⋅), and the curl (∇×)
 
-A comprehensive dependency intelligence, SBOM generation, binary analysis API platform built with Rust, Axum, and Goblin that provides an interface for extracting deep insights into the security and implementation of Rust packages and binaries of various types. 
+Nabla is a binary-first, fair-source, secure API for SAST/SCA tasks — designed to analyze, monitor, and validate the binaries used in your tools, applications, or infrastructure.
 
-## Features
+Built in Rust and deployable anywhere via Docker, Nabla helps modern teams build resilient CI/CD pipelines by generating attestations, SBOMs, CVE reports, and more — all from binaries alone.
 
-- **Security Insights**: Scan Rust crates for vulnerabilities and unsafe code
-- **License Analysis**: Detection and analysis of licenses using `cargo-license`
-- **Source Code Analysis**: Using `syn` to extract structural information
-- **Binary Analysis**: Using `goblin` to extract structural information
-- **Documentation Analysis**: Evaluates documentation coverage and quality
-- **SBOM Generation**: Generates Software Bill of Materials (SBOM)
-- **API Integration**: RESTful API for integration with any platform
-- **Database Storage**: Full analysis results stored in PostgreSQL
+## 🧐 Why Nabla?
 
-## LLM Enrichment Details
+We built this tool because as ecosystems like Rust and Wasm grow, it's becoming more and more common for developers to use third-party binaries in their code and infrastructure. 
 
-The following fields are **enriched via OpenAI** (LLM):
-- **Module Descriptions**: Natural-language summaries of each module's purpose and contents
-- **Struct/Enum/Type Descriptions**: Human-readable explanations of data structures
-- **Function/Trait Descriptions**: Summaries of what each function or trait does
-- **Usage Examples**: LLM-generated code snippets or usage patterns
-- **Documentation Summaries**: High-level summaries of documentation coverage and quality
+This introduces risk into the software supply chain, including:
 
-The following fields are **not LLM-enriched** (static analysis only):
-- **Security Audit Results**: Direct output from `cargo-audit`
-- **License Information**: Direct output from `cargo-license`
-- **Dependency Graphs**: From `cargo metadata`
-- **Unsafe Code Locations**: From static code analysis
-- **Git History**: From `git2`/repository inspection
-- **Build Information**: Static detection of build scripts, macros, etc.
+    - Shadow dependencies and bundled binaries
+    - Missing or unverifiable SBOMs
+    - Unknown vulnerabilities (CVEs)
+    - Inability to produce attestations or verify signatures
 
-## API Endpoints
+Nabla acts like a firewall for your binary inputs — providing deep binary analysis, vulnerability detection, attestation, and SBOMs in a clean, simple API.
 
-### POST /packages
+## ✨ Features
 
-Analyzes a Rust package and stores results in the database.
+- **🔍 Binary Analysis**:  ELF, PE, Mach-O, and Wasm parsing via `goblin`
+- **🧾 SBOM Generation**: CycloneDX format generation from extracted packages
+- **🚨 CVE Lookup**: Detect vulnerabilities in known packages and binary patterns
+- **✍️ Attestation**: Sigstore-compatible predicate output ready for signing
+- **⛓️‍💥 Diffing**: Compare two binaries and view differences in content and structure
+- **⚙️ REST API**: JSON-first API built on Axum, ready for CI/CD pipelines
 
-**Request Body:**
+## 🔌 API Endpoints
+
+All endpoints require an `X-API-KEY` header unless otherwise configured.
+
+### POST /binary/analyse
+
+Uploads a binary and returns detailed metadata, a package list, and a CycloneDX SBOM. 
+
+**Example:
+```bash
+curl -X POST http://localhost:8080/binary/analyse \
+  -H "X-API-KEY: sk_..." \
+  -F "file=@./your_binary"
+```
+
+**Request Params:
+
 ```json
 {
-  "name": "serde",
-  "version": "1.0.0",
-  "api_key": "your-api-key",
+  "file": "<binary file>"  // multipart/form-data
 }
 ```
 
-**Response:**
+**Response Format:
 ```json
 {
-  "success": true,
-  "package_id": "uuid-of-analysis",
-  "message": "Package serde:1.0.0 analyzed successfully",
-  "enriched_fields": [
-    "module_descriptions",
-    "struct_descriptions",
-    "function_descriptions",
-    "trait_descriptions",
-    "usage_examples",
-    "documentation_summaries"
-  ]
+  "format": "ELF" | "MachO" | "PE" | "WASM",
+  "hashes": {
+    "sha256": "string"
+  },
+  "metadata": {
+    "arch": "x86_64",
+    "os": "linux",
+    "entrypoint": "0x400000"
+  },
+  "packages": [
+    {
+      "name": "openssl",
+      "version": "1.1.1",
+      "origin": "debian",
+      "license": "OpenSSL",
+      "source": "extracted"
+    }
+  ],
+  "sbom": {
+    "cyclonedx": "{...}",  // JSON CycloneDX SBOM
+    "format": "application/json"
+  }
 }
 ```
 
-### GET /binary
 
-Analyzes a binary and stores results in the database.
+### POST /binary/diff
 
-**Request Body:**
+Compares two binaries and returns metadata, symbol, and package-level differences.
+
+**Example:
+```bash
+curl -X POST http://localhost:8080/binary/diff \
+  -H "X-API-KEY: sk_..." \
+  -F "file1=@old_binary" \
+  -F "file2=@new_binary"
+```
+
+**Request Params:
+
 ```json
 {
-  "path": "/path/to/binary",
-  "api_key": "your-api-key",
+  "file1": "<binary file>",
+  "file2": "<binary file>"
 }
 ```
 
-**Response:**
+**Response Format:
 ```json
 {
-  "success": true,
-  "binary_id": "uuid-of-analysis",
-  "message": "Binary analyzed successfully",
-  "enriched_fields": [
-    "module_descriptions",
-    "struct_descriptions",
-    "function_descriptions",
-    "trait_descriptions",
-    "usage_examples",
-    "documentation_summaries"
-  ]
+  "diff": {
+    "added": [
+      {
+        "name": "libssl",
+        "version": "3.0.0"
+      }
+    ],
+    "removed": [
+      {
+        "name": "libssl",
+        "version": "1.1.1"
+      }
+    ],
+    "changed": [
+      {
+        "name": "libcurl",
+        "old_version": "7.78.0",
+        "new_version": "7.88.0"
+      }
+    ]
+  },
+  "file1": {
+    "hash": "sha256:...",
+    "format": "ELF"
+  },
+  "file2": {
+    "hash": "sha256:...",
+    "format": "ELF"
+  }
+}
+
+```
+
+### POST /binary/attest
+
+Generates a unsigned Sigstore-compatible attestation from the given binary. 
+
+**Example:
+```bash
+curl -X POST http://localhost:8080/binary/attest \
+  -H "X-API-KEY: sk_..." \
+  -F "file=@./my_binary"
+```
+
+**Request Params:
+
+```json
+{
+  "file": "<binary file>"
 }
 ```
 
-**Note:** You can find documentation for other endpoints at the [Platform Docs](https://docs.atelierlogos.studio).
+**Response Format:
+```json
+{
+  "_type": "https://in-toto.io/Statement/v0.1",
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "subject": [
+    {
+      "name": "your_binary",
+      "digest": {
+        "sha256": "..."
+      }
+    }
+  ],
+  "predicate": {
+    "builder": {
+      "id": "nabla:internal"
+    },
+    "buildType": "nabla/binary-analysis",
+    "metadata": {
+      "buildStartedOn": "2025-07-21T12:34:00Z"
+    },
+    "materials": [
+      {
+        "uri": "file:./my_binary",
+        "digest": {
+          "sha256": "..."
+        }
+      }
+    ]
+  }
+}
+```
+
+### POST /binary/check-cves
+
+Extracts known packages and checks them against a CVE database.
+
+**Example Request:
+```bash
+curl -X POST http://localhost:8080/binary/check-cves \
+  -H "X-API-KEY: sk_..." \
+  -F "file=@./my_binary"
+```
+
+**Request Params:
+
+```json
+{
+  "file": "<binary file>"
+}
+```
+
+**Response Format:
+```json
+{
+  "hash": "sha256:...",
+  "packages": [
+    {
+      "name": "openssl",
+      "version": "1.1.1",
+      "vulnerabilities": [
+        {
+          "id": "CVE-2023-0464",
+          "cvss": 7.5,
+          "summary": "Potential buffer overflow in TLS handshake",
+          "references": [
+            "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-0464"
+          ]
+        }
+      ]
+    }
+  ],
+  "unresolved": []
+}
+```
 
 ### GET /health
 
@@ -112,122 +247,56 @@ Health check endpoint.
 }
 ```
 
-## Analyzed Data
-
-The API extracts and stores the following information:
-
-- **Package Metadata**: Name, version, description, repository, homepage, documentation *(not LLM-enriched)*
-- **Dependencies**: Full dependency graph with version requirements *(not LLM-enriched)*
-- **Source Analysis**: Key modules, structs, functions, traits *(LLM-enriched: descriptions, summaries, usage examples)*
-- **Security**: Cargo audit results, unsafe code locations, CVE references *(not LLM-enriched)*
-- **Licenses**: License information from multiple sources *(not LLM-enriched)*
-- **Documentation**: Coverage analysis and quality metrics *(LLM-enriched: summaries and quality analysis)*
-- **Build Information**: Presence of build.rs, macro usage *(not LLM-enriched)*
-- **Git History**: Last commit date, estimated publish date *(not LLM-enriched)*
-
 ## Setup
 
 ### Prerequisites
 
 - Rust 1.82+
-- PostgreSQL database (or Supabase)
-- `cargo-audit` (automatically installed)
-- `cargo-license` (automatically installed)
-- `goblin` (automatically installed)
-- `syn` (automatically installed)
-- `git2` (automatically installed)
-- `sqlx` (automatically installed)
+- PostgreSQL database (For API Key Handling)
 
 ### Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-DATABASE_URL=postgresql://username:password@localhost/nabla
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
+DATABASE_URL=YOUR_DATABASE_URL
 PORT=8080
-OPENAI_API_KEY=sk-**************************************
 ```
 
-### Database Setup
+### Getting Started
 
-1. Run migrations:
+Clone the repo:
+
 ```bash
-cargo install sqlx-cli
-sqlx migrate run
+git clone https://github.com/jdbohrman/nabla.git
+cd nabla
 ```
 
-2. The migration creates a test API key: `test-api-key-12345`
+Setup your environment:
 
-### Running
+```bash
+cp .env.example .env
+```
+
+Edit .env:
+
+```env
+DATABASE_URL=postgres://...
+PORT=8080
+```
+
+Run locally:
 
 ```bash
 cargo run
 ```
 
-The server will start on the configured port (default: 8080).
+Or with Docker:
 
-## Database Schema
-
-### packages table
-
-Stores complete analysis results with fields for:
-- Package metadata (name, version, description, etc.) *(not LLM-enriched)*
-- Structural analysis (modules, structs, functions, traits) *(LLM-enriched: descriptions, summaries, usage)*
-- Security analysis (audit reports, unsafe usage, CVEs) *(not LLM-enriched)*
-- Documentation metrics *(LLM-enriched: summaries)*
-- Git information *(not LLM-enriched)*
-- License data *(not LLM-enriched)*
-
-### api_keys table
-
-Manages API authentication:
-- UUID key IDs
-- API key strings
-- Key names and status
-
-### binary table
-
-Stores complete analysis results with fields for:
-- Binary metadata (path, size, etc.) *(not LLM-enriched)*
-- Structural analysis (modules, structs, functions, traits) *(LLM-enriched: descriptions, summaries, usage)*
-- Security analysis (audit reports, unsafe usage, CVEs) *(not LLM-enriched)*
-- Documentation metrics *(LLM-enriched: summaries)*
-- Git information *(not LLM-enriched)*
-- License data *(not LLM-enriched)*
-
-## Integration
-
-## Tools Integration
-
-- **cargo-audit**: Vulnerability scanning with advisory database *(not LLM-enriched)*
-- **cargo-license**: License information extraction *(not LLM-enriched)*
-- **cargo metadata**: Package metadata and dependency graphs *(not LLM-enriched)*
-- **syn**: AST parsing for source code analysis *(partially LLM-enriched)*
-- **rustdoc**: Documentation generation and analysis *(partially LLM-enriched)*
-- **git2**: Repository history analysis *(not LLM-enriched)*
-
-## Performance
-
-- Parallel analysis execution where possible
-- Efficient database operations with connection pooling
-- Streaming analysis for large packages
-- Temporary file cleanup
-
-## Error Handling
-
-- Comprehensive error responses
-- Logging integration with tracing
-- Graceful degradation when tools fail
-- Database transaction safety
-
-## Security
-
-- API key authentication
-- SQL injection protection via SQLx
-- Input validation
-- Secure temporary file handling
+```bash
+docker build -t nabla .
+docker run -p 8080:8080 -e DATABASE_URL=... nabla
+```
 
 ## License
 
