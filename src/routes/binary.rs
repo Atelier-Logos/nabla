@@ -8,9 +8,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
-use crate::{AppState, middleware::ApiKeyRecord, binary::{
-    analyze_binary, BinaryAnalysis, SecretScanner, SecretScanResult, 
-    generate_sbom
+use serde_json::json;
+
+// Type alias for JSON responses
+// Removed custom ResponseJson type alias
+use crate::{AppState, binary::{
+    analyze_binary, BinaryAnalysis, 
+    generate_sbom, scan_binary_vulnerabilities, VulnerabilityMatch
 }};
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +33,19 @@ pub struct BinaryUploadResponse {
 pub struct ErrorResponse {
     pub error: String,
     pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CveScanResponse {
+    pub matches: Vec<VulnerabilityMatch>,
+}
+
+pub async fn health_check() -> Json<serde_json::Value> {
+    Json(json!({
+        "status": "healthy",
+        "service": "Nabla",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
 }
 
 // POST /binary - Upload and analyze binary
@@ -120,37 +137,7 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analysis completed for {}: format={}, arch={}, {} strings", 
                    file_name, analysis.format, analysis.architecture, analysis.embedded_strings.len());
 
-    // Store in database (simplified for now, you'd want proper DB schema)
-    let query = "INSERT INTO binaries (id, file_name, hash_sha256, analysis_data, contents, created_at, key_id) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)";
-    
-    sqlx::query(query)
-        .bind(&analysis.id)
-        .bind(&analysis.file_name)
-        .bind(&analysis.hash_sha256)
-        .bind(serde_json::to_value(&analysis).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "serialization_error".to_string(),
-                    message: format!("Failed to serialize analysis: {}", e),
-                }),
-            )
-        })?)
-        .bind(&contents)
-        .bind(&analysis.created_at)
-        .bind(&api_key.id)
-        .execute(&state.pool.pool)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "database_error".to_string(),
-                    message: format!("Failed to store analysis: {}", e),
-                }),
-            )
-        })?;
+
 
     Ok(Json(BinaryUploadResponse {
         id: analysis.id,
@@ -159,59 +146,14 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
-// GET /binary/:hash - Get existing analysis by hash
-pub async fn get_binary_analysis(
-    State(state): State<AppState>,
-    Path(hash): Path<String>,
-) -> Result<Json<BinaryAnalysis>, (StatusCode, Json<ErrorResponse>)> {
-    let query = "SELECT analysis_data FROM binaries WHERE hash_sha256 = $1";
-    
-    let row = sqlx::query(query)
-        .bind(&hash)
-        .fetch_optional(&state.pool.pool)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "database_error".to_string(),
-                    message: format!("Database query failed: {}", e),
-                }),
-            )
-        })?;
-
-    match row {
-        Some(row) => {
-            let analysis_data: serde_json::Value = row.get("analysis_data");
-            let analysis: BinaryAnalysis = serde_json::from_value(analysis_data).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: "deserialization_error".to_string(),
-                        message: format!("Failed to deserialize analysis: {}", e),
-                    }),
-                )
-            })?;
-            Ok(Json(analysis))
-        }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "not_found".to_string(),
-                message: format!("No binary analysis found for hash: {}", hash),
-            }),
-        )),
-    }
-}
-
-// POST /binary/scan-secrets - Scan for secrets in binary
-pub async fn scan_binary_secrets(
+// POST /binary/check-cves - Scan for CVEs
+pub async fn check_cve(
     State(_state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<Json<SecretScanResult>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut contents = vec![];
+    let mut file_name = "uploaded.bin".to_string();
 
-    // Extract file from multipart form
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
@@ -221,6 +163,9 @@ pub async fn scan_binary_secrets(
             }),
         )
     })? {
+        if let Some(name) = field.file_name() {
+            file_name = name.to_string();
+        }
         contents = field.bytes().await.map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
@@ -242,85 +187,114 @@ pub async fn scan_binary_secrets(
         ));
     }
 
-    // Initialize secret scanner
-    let scanner = SecretScanner::new().map_err(|e| {
+    // Perform a lightweight binary analysis to gather imports/libraries
+    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: "scanner_init_error".to_string(),
-                message: format!("Failed to initialize secret scanner: {}", e),
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
             }),
         )
     })?;
 
-    // Scan for secrets
-    let scan_result = scanner.scan_binary(&contents).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "scan_error".to_string(),
-                message: format!("Failed to scan for secrets: {}", e),
-            }),
-        )
-    })?;
+    let matches = scan_binary_vulnerabilities(&analysis);
 
-    Ok(Json(scan_result))
+    Ok(Json(CveScanResponse { matches }))
 }
 
-// GET /binary/:hash/sbom - Get SBOM for a binary
-pub async fn get_binary_sbom(
-    State(state): State<AppState>,
-    Path(hash): Path<String>,
-    Query(_params): Query<SbomQuery>,
+// POST /binary/diff - compare two binaries
+pub async fn diff_binaries(
+    State(_state): State<AppState>,
+    mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
-    // First get the binary analysis
-    let query = "SELECT analysis_data FROM binaries WHERE hash_sha256 = $1";
-    
-    let row = sqlx::query(query)
-        .bind(&hash)
-        .fetch_optional(&state.pool.pool)
-        .await
-        .map_err(|e| {
+    // Extract two files
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "multipart_error".to_string(),
+                message: format!("Failed parsing multipart: {}", e),
+            }),
+        )
+    })? {
+        let name = field.file_name().map(|s| s.to_string()).unwrap_or_else(|| "file".to_string());
+        let bytes = field.bytes().await.map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "database_error".to_string(),
-                    message: format!("Database query failed: {}", e),
+                    error: "read_error".to_string(),
+                    message: format!("Failed to read file: {}", e),
                 }),
             )
-        })?;
+        })?.to_vec();
+        files.push((name, bytes));
+    }
 
-    let analysis_data: serde_json::Value = match row {
-        Some(row) => row.get("analysis_data"),
-        None => return Err((
-            StatusCode::NOT_FOUND,
+    if files.len() != 2 {
+        return Err((
+            StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: "not_found".to_string(),
-                message: format!("No binary analysis found for hash: {}", hash),
+                error: "invalid_input".to_string(),
+                message: "Exactly two files must be provided".to_string(),
             }),
-        )),
-    };
+        ));
+    }
 
-    let analysis: BinaryAnalysis = serde_json::from_value(analysis_data).map_err(|e| {
+    // Analyze each binary to get symbol information
+    let analysis1 = analyze_binary(&files[0].0, &files[0].1).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: "deserialization_error".to_string(),
-                message: format!("Failed to deserialize analysis: {}", e),
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze first binary: {}", e),
             }),
         )
     })?;
 
-    // Generate SBOM (currently only CycloneDX format supported)
-    let sbom = generate_sbom(&analysis).map_err(|e| {
+    let analysis2 = analyze_binary(&files[1].0, &files[1].1).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: "sbom_generation_error".to_string(),
-                message: format!("Failed to generate SBOM: {}", e),
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze second binary: {}", e),
             }),
         )
     })?;
 
-    Ok(Json(sbom))
+    use sha2::Digest;
+    use std::collections::HashSet;
+
+    let mut meta = serde_json::Map::new();
+    for (idx, (name, data)) in files.iter().enumerate() {
+        meta.insert(format!("file{}_name", idx+1), serde_json::json!(name));
+        meta.insert(format!("file{}_size", idx+1), serde_json::json!(data.len()));
+        meta.insert(format!("file{}_sha256", idx+1), serde_json::json!(format!("{:x}", sha2::Sha256::digest(data))));
+    }
+    meta.insert("size_diff_bytes".to_string(), serde_json::json!((files[0].1.len() as i64) - (files[1].1.len() as i64)));
+
+    // Symbol-level diffs
+    let imports1: HashSet<String> = analysis1.imports.iter().cloned().collect();
+    let imports2: HashSet<String> = analysis2.imports.iter().cloned().collect();
+    let exports1: HashSet<String> = analysis1.exports.iter().cloned().collect();
+    let exports2: HashSet<String> = analysis2.exports.iter().cloned().collect();
+    let symbols1: HashSet<String> = analysis1.detected_symbols.iter().cloned().collect();
+    let symbols2: HashSet<String> = analysis2.detected_symbols.iter().cloned().collect();
+
+    let imports_added: Vec<String> = imports2.difference(&imports1).cloned().collect();
+    let imports_removed: Vec<String> = imports1.difference(&imports2).cloned().collect();
+    let exports_added: Vec<String> = exports2.difference(&exports1).cloned().collect();
+    let exports_removed: Vec<String> = exports1.difference(&exports2).cloned().collect();
+    let symbols_added: Vec<String> = symbols2.difference(&symbols1).cloned().collect();
+    let symbols_removed: Vec<String> = symbols1.difference(&symbols2).cloned().collect();
+
+    meta.insert("imports_added".to_string(), serde_json::json!(imports_added));
+    meta.insert("imports_removed".to_string(), serde_json::json!(imports_removed));
+    meta.insert("exports_added".to_string(), serde_json::json!(exports_added));
+    meta.insert("exports_removed".to_string(), serde_json::json!(exports_removed));
+    meta.insert("symbols_added".to_string(), serde_json::json!(symbols_added));
+    meta.insert("symbols_removed".to_string(), serde_json::json!(symbols_removed));
+
+    Ok(Json(meta.into()))
 }

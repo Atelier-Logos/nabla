@@ -580,6 +580,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dataview"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50eb3a329e19d78c3a3dfa4ec5a51ecb84fa3a20c06edad04be25356018218f9"
+dependencies = [
+ "derive_pod",
+]
+
+[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -631,6 +640,12 @@ dependencies = [
  "quote",
  "syn 2.0.104",
 ]
+
+[[package]]
+name = "derive_pod"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2ea6706d74fca54e15f1d40b5cf7fe7f764aaec61352a9fcec58fe27e042fc8"
 
 [[package]]
 name = "digest"
@@ -734,55 +749,6 @@ name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
-
-[[package]]
-name = "ferropipe-audit"
-version = "0.1.0"
-dependencies = [
- "aho-corasick",
- "anyhow",
- "async-openai",
- "axum",
- "base64ct",
- "blake3",
- "cargo_metadata",
- "chrono",
- "dashmap",
- "dotenvy",
- "entropy",
- "flate2",
- "git2",
- "goblin",
- "home",
- "infer",
- "json",
- "object 0.34.0",
- "once_cell",
- "proc-macro2",
- "quote",
- "regex",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "syn 2.0.104",
- "tar",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-process",
- "toml",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
- "walkdir",
- "wasmparser",
- "which",
-]
 
 [[package]]
 name = "filetime"
@@ -1805,6 +1771,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "nabla"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "async-openai",
+ "axum",
+ "base64ct",
+ "blake3",
+ "bytes 1.10.1",
+ "cargo_metadata",
+ "chrono",
+ "dashmap",
+ "dotenvy",
+ "entropy",
+ "flate2",
+ "git2",
+ "goblin",
+ "home",
+ "http-body-util",
+ "hyper 0.14.32",
+ "infer",
+ "json",
+ "multer",
+ "object 0.34.0",
+ "once_cell",
+ "pelite",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "syn 2.0.104",
+ "tar",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-process",
+ "toml",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "walkdir",
+ "wasmparser",
+ "which",
+]
+
+[[package]]
 name = "net2"
 version = "0.2.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1814,6 +1834,12 @@ dependencies = [
  "libc",
  "winapi 0.3.9",
 ]
+
+[[package]]
+name = "no-std-compat"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
 
 [[package]]
 name = "nom"
@@ -1986,6 +2012,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "pelite"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88dccf4bd32294364aeb7bd55d749604450e9db54605887551f21baea7617685"
+dependencies = [
+ "dataview",
+ "libc",
+ "no-std-compat",
+ "pelite-macros",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "pelite-macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a7cf3f8ecebb0f4895f4892a8be0a0dc81b498f9d56735cb769dc31bf00815b"
+
+[[package]]
 name = "pem-rfc7468"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1999,6 +2044,26 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+
+[[package]]
+name = "pin-project"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "677f1add503faace112b9f1373e43e9e054bfdd22ff1a63c1bc485eaec6a6a8a"
+dependencies = [
+ "pin-project-internal",
+]
+
+[[package]]
+name = "pin-project-internal"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e918e4ff8c4549eb882f14b3a4bc8c8bc93de829416eacf579f1207a8fbf861"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
 
 [[package]]
 name = "pin-project-lite"
@@ -3446,6 +3511,10 @@ version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c"
 dependencies = [
+ "futures-core",
+ "futures-util",
+ "pin-project",
+ "pin-project-lite",
  "tower-layer",
  "tower-service",
  "tracing",

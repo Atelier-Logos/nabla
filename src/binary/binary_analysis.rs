@@ -3,8 +3,10 @@ use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
 use blake3;
-use goblin::{Object, pe::PE, elf::Elf, mach::MachO};
-use object::{Object as ObjectFile, ObjectSection, ObjectSymbol};
+use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::MachO};
+#[allow(unused_imports)]
+use object::Object as ObjectTrait;
+use object::ObjectSymbol;
 use wasmparser::{Parser, Payload};
 use infer;
 use std::collections::HashSet;
@@ -63,21 +65,21 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         match &contents[0..4] {
             [0x7f, b'E', b'L', b'F'] => {
                 tracing::info!("ELF magic detected, using goblin ELF parser");
-                if let Ok(Object::Elf(elf)) = Object::parse(contents) {
+                if let Ok(GoblinObject::Elf(elf)) = GoblinObject::parse(contents) {
                     analyze_elf(&mut analysis, &elf, contents)?;
                     parsed_successfully = true;
                 }
             }
             [b'M', b'Z', _, _] => {
                 tracing::info!("PE magic detected, using goblin PE parser");
-                if let Ok(Object::PE(pe)) = Object::parse(contents) {
+                if let Ok(GoblinObject::PE(pe)) = GoblinObject::parse(contents) {
                     analyze_pe(&mut analysis, &pe, contents)?;
                     parsed_successfully = true;
                 }
             }
             [0xfe, 0xed, 0xfa, 0xce] | [0xce, 0xfa, 0xed, 0xfe] => {
                 tracing::info!("Mach-O magic detected, using goblin Mach-O parser");
-                if let Ok(Object::Mach(mach)) = Object::parse(contents) {
+                if let Ok(GoblinObject::Mach(mach)) = GoblinObject::parse(contents) {
                     match mach {
                         goblin::mach::Mach::Fat(_) => {
                             analysis.format = "macho-fat".to_string();
@@ -101,21 +103,21 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
     // Fallback to generic goblin parsing if magic bytes didn't work
     if !parsed_successfully {
         tracing::debug!("No specific magic bytes found, attempting generic goblin parsing...");
-        match Object::parse(contents) {
+        match GoblinObject::parse(contents) {
             Ok(obj) => {
                 tracing::info!("Successfully parsed with goblin (generic)");
                 match obj {
-                    Object::Elf(elf) => {
+                    GoblinObject::Elf(elf) => {
                         tracing::info!("Detected ELF binary (generic)");
                         analyze_elf(&mut analysis, &elf, contents)?;
                         parsed_successfully = true;
                     }
-                    Object::PE(pe) => {
+                    GoblinObject::PE(pe) => {
                         tracing::info!("Detected PE binary (generic)");
                         analyze_pe(&mut analysis, &pe, contents)?;
                         parsed_successfully = true;
                     }
-                    Object::Mach(mach) => {
+                    GoblinObject::Mach(mach) => {
                         tracing::info!("Detected Mach-O binary (generic)");
                         match mach {
                             goblin::mach::Mach::Fat(_) => {
@@ -126,7 +128,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
                         }
                         parsed_successfully = true;
                     }
-                    Object::Archive(_) => {
+                    GoblinObject::Archive(_) => {
                         tracing::info!("Detected archive");
                         analysis.format = "archive".to_string();
                         parsed_successfully = true;

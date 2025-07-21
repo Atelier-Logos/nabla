@@ -1,5 +1,5 @@
 [package]
-name = "ferropipe-audit"
+name = "nabla"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 axum = { version = "0.7", features = ["multipart"] }
 async-openai = "0.29"
 tokio = { version = "1.0", features = ["full"] }
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Serialization
@@ -60,6 +60,7 @@ goblin = "0.8"
 object = "0.34"
 wasmparser = "0.121"
 infer = "0.16"
+pelite = "0.10"
 
 # Secret scanning
 aho-corasick = "1.1"
@@ -94,3 +95,10 @@ dashmap = "5.5"
 
 # Additional dependencies for base64ct
 base64ct = "=1.7.3" 
+
+[dev-dependencies]
+hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1.0", features = ["full"] }
+http-body-util = "0.1" 
+bytes = "1"
+multer = "3" 

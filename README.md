@@ -3,7 +3,7 @@
 # The Atelier Logos API Platform
 
 [![Rust Version](https://img.shields.io/badge/rust-1.82%2B-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/ferropipe-audit)
+[![Docker](https://img.shields.io/badge/docker-ready-blue?style=flat-square)](https://hub.docker.com/r/jdbohrman/nabla)
 [![OpenAI Enriched](https://img.shields.io/badge/LLM-OpenAI-purple?style=flat-square&logo=openai&logoColor=white)](https://platform.openai.com/)
 
 A comprehensive dependency intelligence, SBOM generation, binary analysis API platform built with Rust, Axum, and Goblin that provides an interface for extracting deep insights into the security and implementation of Rust packages and binaries of various types. 
@@ -107,7 +107,7 @@ Health check endpoint.
 ```json
 {
   "status": "healthy",
-  "service": "ferropipe-audit",
+  "service": "nabla",
   "version": "0.1.0"
 }
 ```
@@ -143,7 +143,7 @@ The API extracts and stores the following information:
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-DATABASE_URL=postgresql://username:password@localhost/ferropipe_audit
+DATABASE_URL=postgresql://username:password@localhost/nabla
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 PORT=8080

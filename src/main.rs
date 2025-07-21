@@ -4,13 +4,12 @@ use axum::{
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
+use axum::extract::DefaultBodyLimit;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use dotenvy::dotenv;
 
 mod config;
-mod models;
 mod routes;
-mod package;
 mod database;
 mod middleware;
 mod binary;
@@ -27,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "ferropipe_audit=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "nabla=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -60,13 +59,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Protected routes (with auth)
     let protected_routes = Router::new()
-        .route("/binary", post(routes::upload_and_analyze_binary))
-        .route("/binary/:hash", axum::routing::get(routes::get_binary_analysis))
-        .route("/binary/scan-secrets", post(routes::scan_binary_secrets))
-        .route("/binary/:hash/sbom", axum::routing::get(routes::get_binary_sbom))
-        // TODO: Add audit route
-        .route("/packages", post(routes::analyze_package))
-        .route("/packages/:id", axum::routing::get(routes::fetch_package_analysis))
+        .route("/binary/analyze", post(routes::upload_and_analyze_binary))
+        .route("/binary/diff", post(routes::diff_binaries))
+        .route("/binary/check-cves", post(routes::check_cve))
         .route_layer(auth_layer);
 
     // Build the main app router
@@ -74,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(public_routes)
         .merge(protected_routes)
         .layer(cors)
+        .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;

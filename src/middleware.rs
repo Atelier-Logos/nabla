@@ -110,7 +110,7 @@ static RATE_LIMIT_MAP: Lazy<DashMap<Uuid, (u32, DateTime<Utc>)>> = Lazy::new(|| 
 // ------------------------------------------------------------
 // Helper — extract API key from headers or query string
 // ------------------------------------------------------------
-fn extract_api_key(req: &Request<Body>) -> Option<String> {
+pub fn extract_api_key(req: &Request<Body>) -> Option<String> {
     // 1. Custom header
     if let Some(value) = req.headers().get("x-api-key") {
         if let Ok(v) = value.to_str() {
