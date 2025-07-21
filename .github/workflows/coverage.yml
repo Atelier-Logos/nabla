@@ -8,12 +8,33 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
     steps:
       - uses: actions/checkout@v3
+
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
+
+      # OPTIONAL: Run DB migrations here if your tests depend on schema
+      # - name: Run migrations
+      #   run: diesel migration run
+
       - name: Generate coverage report
         run: cargo tarpaulin --out Xml
+
       - name: Upload coverage to codecov
         uses: codecov/codecov-action@v4
         with:
