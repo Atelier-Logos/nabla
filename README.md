@@ -1,5 +1,10 @@
 ![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
 
+[![codecov](https://codecov.io/github/Atelier-Logos/nabla/branch/main/graph/badge.svg?token=A25NWBGGB9)](https://codecov.io/github/Atelier-Logos/nabla)
+[![CI](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml)
+[![License: FSL](https://img.shields.io/badge/license-FSL-lightgrey)](LICENSE)
+
+
 # Nabla - A fair-source SAST/SCA API for calculating your SSCS gradients
 
 > The nabla is used in vector calculus as part of three distinct differential operators: the gradient (∇), the divergence (∇⋅), and the curl (∇×)

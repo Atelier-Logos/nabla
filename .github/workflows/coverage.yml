@@ -8,23 +8,16 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    strategy:
+      matrix:
+        rust: [1.80.0]
 
     env:
+      CARGO_HOME: /usr/local/cargo
+      PATH: /usr/local/cargo/bin:$PATH  
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
+      RUST_LOG: info
+      RUST_BACKTRACE: 1
 
     steps:
       - uses: actions/checkout@v3
