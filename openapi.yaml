@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: Nabla Binary Analysis API
+  description: Analyze, diff, scan, and attest binaries securely with Nabla.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    BinaryAnalysis:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        hash_sha256:
+          type: string
+        format:
+          type: string
+        architecture:
+          type: string
+        embedded_strings:
+          type: array
+          items:
+            type: string
+        # ...add more fields as needed
+
+    BinaryUploadResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        hash:
+          type: string
+        analysis:
+          $ref: "#/components/schemas/BinaryAnalysis"
+
+    CveMatch:
+      type: object
+      properties:
+        cve_id:
+          type: string
+        package:
+          type: string
+        severity:
+          type: string
+        description:
+          type: string
+
+    CveScanResponse:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/CveMatch"
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                  version:
+                    type: string
+
+  /binary/analyze:
+    post:
+      summary: Upload and analyze a binary
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Binary analyzed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BinaryUploadResponse"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /binary/diff:
+    post:
+      summary: Compare two binary files
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file1:
+                  type: string
+                  format: binary
+                file2:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Binary diff result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid input or multipart error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Analysis failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /binary/check-cves:
+    post:
+      summary: Scan a binary for known CVEs
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: List of matching CVEs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CveScanResponse"
+        '400':
+          description: Invalid input or multipart error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Analysis failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /binary/attest:
+    post:
+      summary: Generate an in-toto attestation for a binary
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Attestation generated
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Missing or empty binary
+        '500':
+          description: Internal error
