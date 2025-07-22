@@ -51,8 +51,7 @@ pub async fn health_check() -> Json<serde_json::Value> {
 
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
-    State(state): State<AppState>,
-    Extension(api_key): Extension<crate::middleware::ApiKeyRecord>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();

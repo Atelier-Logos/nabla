@@ -3,25 +3,38 @@ use axum::{
     routing::post,
     Router,
 };
+use tokio::spawn;
 use tower_http::cors::{Any, CorsLayer};
 use axum::extract::DefaultBodyLimit;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use dotenvy::dotenv;
+use reqwest::Client; // Add import for Client
 
+mod background_tasks;
 mod config;
 mod routes;
-mod database;
 mod middleware;
 mod binary;
 
 use config::Config;
-use database::DatabasePool;
+use middleware::license_jwt::validate_license_jwt;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Config,
+    pub client: Client, // Add client field
+    pub base_url: String, // Add base_url field
+    pub license_jwt_secret: Arc<[u8; 32]>,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
 
+    let key_b64 = std::env::var("LICENSE_SIGNING_KEY").expect("LICENSE_SIGNING_KEY env missing");
+    let license_jwt_secret = general_purpose::STANDARD.decode(key_b64.trim())?;
+    
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -33,12 +46,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Load configuration
     let config = Config::from_env()?;
-    
-    // Initialize database pool
-    let pool = DatabasePool::new(&config.database_url).await?;
-    
+    // Initialize license client
+    let client = Client::new();
+
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     // Skip migrations since tables already exist
-    // sqlx::migrate!("./migrations").run(&pool.pool).await?;
 
     // Configure CORS
     let cors = CorsLayer::new()
@@ -47,16 +59,19 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
     // Build the shared application state
-    let state = AppState { pool, config: config.clone() };
-
+    let state = AppState {
+        config: config.clone(),
+        client,
+        base_url,
+        license_jwt_secret,
+    };
     // Create middleware layer that validates API keys & enforces quotas
-    let auth_layer = axum::middleware::from_fn_with_state(state.clone(), middleware::validate_api_key);
+    let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
 
     // Public routes (no auth)
     let public_routes = Router::new()
         .route("/health", axum::routing::get(routes::health_check))
         .route("/debug/multipart", post(routes::debug_multipart));
-
     // Protected routes (with auth)
     let protected_routes = Router::new()
         .route("/binary/analyze", post(routes::upload_and_analyze_binary))
@@ -81,9 +96,3 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-#[derive(Clone)]
-pub struct AppState {
-    pub pool: DatabasePool,
-    pub config: Config,
-} 
