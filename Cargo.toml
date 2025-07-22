@@ -97,7 +97,6 @@ dashmap = "5.5"
 
 # Additional dependencies for base64ct
 base64ct = "=1.7.3" 
-multipart = "0.18.0"
 
 [dev-dependencies]
 hyper = { version = "0.14.12", features = ["full"] }
