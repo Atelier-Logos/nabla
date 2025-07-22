@@ -44,5 +44,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/nabla:latest
-            ghcr.io/${{ github.repository_owner }}/nabla:${{ steps.vars.outputs.TAG }}
+            ghcr.io/atelier-logos/nabla:latest
+            ghcr.io/atelier-logos/nabla:${{ steps.vars.outputs.TAG }}
