@@ -1,19 +1,20 @@
 // src/lib.rs
-
+use std::sync::Arc;
 pub mod config;
 pub mod routes;
-pub mod database;
 pub mod middleware;
 pub mod binary;
 
 // Re-export AppState so integration tests can build routers easily.
 use config::Config;
-use database::DatabasePool;
+use reqwest::Client;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: DatabasePool,
     pub config: Config,
+    pub client: Client,
+    pub base_url: String,
+    pub license_jwt_secret: Arc<[u8; 32]>,
 }
 
 // For binary crate main.rs we still have its own AppState; To avoid duplication, we

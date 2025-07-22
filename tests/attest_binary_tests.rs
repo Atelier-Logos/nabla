@@ -41,11 +41,12 @@ mod tests {
         // Create dummy app state, adjust as necessary for your app
         let config = config::Config::from_env().unwrap();
 
-        let pool = database::DatabasePool::new(&config.database_url).await.unwrap();
 
         let state = AppState {
-            pool,
             config,
+            client: Client::new(),
+            base_url: "http://localhost:8080".to_string(),
+            license_jwt_secret: Arc::new([0; 32]),
         };
 
         // Build router with only the attest route for this test
