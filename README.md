@@ -39,7 +39,7 @@ Nabla acts like a firewall for your binary inputs — providing deep binary anal
 
 All endpoints require an `X-API-KEY` header unless otherwise configured.
 
-### POST /binary/analyse
+### POST /binary/analyze
 
 Uploads a binary and returns detailed metadata, a package list, and a CycloneDX SBOM. 
 
