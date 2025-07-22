@@ -100,7 +100,7 @@ base64ct = "=1.7.3"
 multipart = "0.18.0"
 
 [dev-dependencies]
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "0.14.12", features = ["full"] }
 tokio = { version = "1.0", features = ["full"] }
 http-body-util = "0.1" 
 bytes = "1"
