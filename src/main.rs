@@ -3,7 +3,6 @@ use axum::{
     routing::post,
     Router,
 };
-use tokio::spawn;
 use tower_http::cors::{Any, CorsLayer};
 use axum::extract::DefaultBodyLimit;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

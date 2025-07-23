@@ -2,7 +2,7 @@ use regex::Regex;
 use std::collections::HashSet;
 use serde::{Serialize, Deserialize};
 
-use goblin::{elf::Elf, mach::Mach, pe::PE};
+use goblin::{elf::Elf, pe::PE};
 use wasmparser::{Parser, Payload};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -303,7 +303,7 @@ pub fn calculate_license_confidence(licenses: &HashSet<String>, spdx: &HashSet<S
 // -----------------------------------------
 
 #[derive(Debug)]
-struct PeVersionInfo {
+pub struct PeVersionInfo {
     file_version: Option<String>,
     product_version: Option<String>,
     company: Option<String>,

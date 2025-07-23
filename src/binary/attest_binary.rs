@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde_json::{json, Value};
+use serde_json::{json};
 use chrono::Utc;
 use sha2::{Sha256, Digest};
 use base64::{engine::general_purpose, Engine as _};
@@ -12,7 +12,7 @@ use hex;
 use crate::{AppState, binary::analyze_binary};
 
 pub async fn attest_binary(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     // Extract binary file from multipart
@@ -36,7 +36,7 @@ pub async fn attest_binary(
     let mut hasher = Sha256::new();
     hasher.update(&file_bytes);
     let hash = hasher.finalize();
-    let encoded_hash = general_purpose::STANDARD.encode(&hash);
+    let _encoded_hash = general_purpose::STANDARD.encode(&hash);
 
     // Run your internal analysis logic
     let analysis_struct = match analyze_binary(

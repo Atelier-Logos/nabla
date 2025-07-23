@@ -3,7 +3,7 @@ use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
 use blake3;
-use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::{Mach, MachO, load_command::CommandVariant}};
+use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::{MachO, load_command::CommandVariant}};
 use object::{Object, ObjectSymbol};
 use wasmparser::{Parser, Payload};
 use infer;

@@ -1,29 +1,20 @@
 // src/routes/binary.rs
 use axum::{
-    extract::{Multipart, State, Path, Query},
+    extract::{Multipart, State},
     response::Json,
     http::StatusCode,
-    Extension,
 };
-use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use serde::{Serialize};
 use uuid::Uuid;
 use serde_json::json;
-use object::{Object, ObjectSymbol};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
 use crate::{AppState, binary::{
     analyze_binary, BinaryAnalysis, 
     scan_binary_vulnerabilities, VulnerabilityMatch, 
-    attest_binary
 }};
-
-#[derive(Debug, Deserialize)]
-pub struct SbomQuery {
-    pub format: Option<String>, // "spdx" or "cyclonedx"
-}
 
 #[derive(Debug, Serialize)]
 pub struct BinaryUploadResponse {
