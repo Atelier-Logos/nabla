@@ -12,17 +12,19 @@ use serde::{Deserialize};
 use uuid::Uuid;
 use serde_json::json;
 use once_cell::sync::Lazy;
+use serde::Serialize;
 
 use crate::AppState;
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct LicenseClaims {
-    pub _exp: usize,
-    pub _iat: usize,
-    pub jti: String,
-    pub _plan: String,
-    pub rate_limit: u32,
-    pub _deployment_id: Option<Uuid>,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Claims {
+    sub: String,
+    exp: usize,
+    iat: usize,
+    jti: String,
+    plan: String,
+    rate_limit: u32,
+    deployment_id: Option<Uuid>,
 }
 
 static RATE_LIMIT_MAP: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(|| DashMap::new());
@@ -31,12 +33,12 @@ pub async fn validate_license_jwt(
     State(state): State<AppState>,
     mut req: Request<Body>,
     next: Next,
-) -> Response {
+) -> Result<Response, (StatusCode, axum::Json<serde_json::Value>)> {
     // 1. Extract token from header or query string
     let token = match extract_api_key(&req) {
         Some(t) => t,
         None => {
-            return (StatusCode::UNAUTHORIZED, json_error("missing license token")).into_response();
+            return Ok((StatusCode::TOO_MANY_REQUESTS, json_error("rate limit exceeded")).into_response());
         }
     };
 
@@ -44,12 +46,11 @@ pub async fn validate_license_jwt(
     let decoding_key = DecodingKey::from_secret(&state.license_jwt_secret[..]);
     let validation = Validation::new(Algorithm::HS256);
 
-    let token_data = match decode::<LicenseClaims>(&token, &decoding_key, &validation) {
-        Ok(data) => data,
-        Err(_) => {
-            return (StatusCode::UNAUTHORIZED, json_error("invalid or expired license token")).into_response();
-        }
-    };
+    let token_data = decode::<Claims>(&token, &decoding_key, &validation)
+    .map_err(|e| {
+        eprintln!("JWT decode error: {:?}", e);
+        (StatusCode::UNAUTHORIZED, json_error("invalid or expired license token"))
+    })?; 
 
     let claims = token_data.claims;
 
@@ -64,7 +65,7 @@ pub async fn validate_license_jwt(
         *ts = now;
     }
     if *count >= claims.rate_limit {
-        return (StatusCode::TOO_MANY_REQUESTS, json_error("rate limit exceeded")).into_response();
+        return Ok((StatusCode::TOO_MANY_REQUESTS, json_error("rate limit exceeded")).into_response());
     }
     *count += 1;
 
@@ -72,7 +73,7 @@ pub async fn validate_license_jwt(
     req.extensions_mut().insert(claims);
 
     // 5. Call next handler
-    next.run(req).await
+    Ok(next.run(req).await)
 }
 
 fn json_error(msg: &str) -> axum::Json<serde_json::Value> {

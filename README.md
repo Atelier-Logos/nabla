@@ -7,6 +7,8 @@
 
 # Nabla - A fair-source SAST/SCA API for calculating your SSCS gradients
 
+![terminal demo](demo.gif)
+
 > The nabla is used in vector calculus as part of three distinct differential operators: the gradient (∇), the divergence (∇⋅), and the curl (∇×)
 
 Nabla is a binary-first, fair-source, secure API for SAST/SCA tasks — designed to analyze, monitor, and validate the binaries used in your tools, applications, or infrastructure.

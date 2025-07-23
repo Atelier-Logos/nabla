@@ -8,7 +8,6 @@ use axum::extract::DefaultBodyLimit;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use dotenvy::dotenv;
 use reqwest::Client; // Add import for Client
-use base64::engine::general_purpose;
 use base64::Engine;
 use std::sync::Arc;
 
@@ -32,15 +31,15 @@ pub struct AppState {
 async fn main() -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
-
     let key_b64 = std::env::var("LICENSE_SIGNING_KEY").expect("LICENSE_SIGNING_KEY env missing");
-    let decoded = general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
+    // Ensure length is exactly 32, then convert Vec<u8> to [u8; 32]
     let secret_array: [u8; 32] = decoded
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("LICENSE_SIGNING_KEY must be exactly 32 bytes"))?;
-    let license_jwt_secret = Arc::new(secret_array);
+    .try_into()
+    .map_err(|_| anyhow::anyhow!("LICENSE_SIGNING_KEY must be exactly 32 bytes"))?;
 
-    
+    // Wrap fixed-size array in Arc
+    let license_jwt_secret = Arc::new(secret_array);
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
