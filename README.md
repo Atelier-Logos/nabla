@@ -37,7 +37,7 @@ Nabla acts like a firewall for your binary inputs — providing deep binary anal
 
 ## 🔌 API Endpoints
 
-All endpoints require an `X-API-KEY` header unless otherwise configured.
+All endpoints require an `Authorization: Bearer` token header unless otherwise configured.
 
 ### POST /binary/analyze
 
