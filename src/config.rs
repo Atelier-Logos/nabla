@@ -3,9 +3,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    pub database_url: String,
     pub port: u16,
-    pub api_key_table: String,
+    pub base_url: String,
 }
 
 impl Config {
@@ -13,9 +12,8 @@ impl Config {
         dotenvy::dotenv().ok();
         
         let config = Config {
-            database_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://localhost/nabla".to_string()),
             port: std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse()?,
-            api_key_table: std::env::var("API_KEY_TABLE").unwrap_or_else(|_| "api_keys".to_string()),
+            base_url: std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
         };
 
         Ok(config)

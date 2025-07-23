@@ -22,8 +22,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
+      LICENSE_SIGNING_KEY: ${{ secrets.LICENSE_SIGNING_KEY }}
+      PORT: ${{ secrets.PORT }}
 
     steps:
       - uses: actions/checkout@v3

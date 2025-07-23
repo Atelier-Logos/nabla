@@ -2,8 +2,8 @@ FROM rust:1.82-slim AS builder
 WORKDIR /app
 
 # Set up build arguments and environment variables BEFORE copying code
-ARG DATABASE_URL
-ENV DATABASE_URL=${DATABASE_URL}
+ARG LICENSE_SIGNING_KEY
+ENV LICENSE_SIGNING_KEY=$LICENSE_SIGNING_KEY
 
 COPY . .
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*

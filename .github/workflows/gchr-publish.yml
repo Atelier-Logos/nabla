@@ -44,6 +44,9 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            LICENSE_SIGNING_KEY=${{ secrets.LICENSE_SIGNING_KEY }}
+            PORT=${{ secrets.PORT }}
           tags: |
             ghcr.io/atelier-logos/nabla:latest
             ghcr.io/atelier-logos/nabla:${{ steps.vars.outputs.TAG }}
