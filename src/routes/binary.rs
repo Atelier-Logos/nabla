@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 use serde_json::json;
+use object::{Object, ObjectSymbol};
+use anyhow::{Result, Context};
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
@@ -146,15 +148,17 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
-// POST /binary/check-cves - Scan for CVEs
 pub async fn check_cve(
     State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
+    tracing::info!("check_cve handler called");
+
     let mut contents = vec![];
     let mut file_name = "uploaded.bin".to_string();
 
     while let Some(field) = multipart.next_field().await.map_err(|e| {
+        tracing::error!("Error parsing multipart: {}", e);
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -163,10 +167,15 @@ pub async fn check_cve(
             }),
         )
     })? {
+        tracing::info!("Found field in multipart: {:?}", field.name());
+
         if let Some(name) = field.file_name() {
             file_name = name.to_string();
+            tracing::info!("Uploaded file: {}", file_name);
         }
+
         contents = field.bytes().await.map_err(|e| {
+            tracing::error!("Error reading file: {}", e);
             (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
@@ -178,6 +187,7 @@ pub async fn check_cve(
     }
 
     if contents.is_empty() {
+        tracing::warn!("No file content provided");
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -187,8 +197,8 @@ pub async fn check_cve(
         ));
     }
 
-    // Perform a lightweight binary analysis to gather imports/libraries
     let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -198,10 +208,14 @@ pub async fn check_cve(
         )
     })?;
 
+    tracing::info!("Binary analysis complete: {:?}", analysis);
+
     let matches = scan_binary_vulnerabilities(&analysis);
+    tracing::info!("Vuln scan complete. {} match(es)", matches.len());
 
     Ok(Json(CveScanResponse { matches }))
 }
+
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(

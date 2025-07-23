@@ -3,10 +3,8 @@ use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
 use blake3;
-use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::MachO};
-#[allow(unused_imports)]
-use object::Object as ObjectTrait;
-use object::ObjectSymbol;
+use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::{Mach, MachO, load_command::CommandVariant}};
+use object::{Object, ObjectSymbol};
 use wasmparser::{Parser, Payload};
 use infer;
 use std::collections::HashSet;
@@ -30,7 +28,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         kind.mime_type().to_string()
     } else {
         tracing::debug!("Could not detect file type, using fallback");
-        // Try to detect based on magic bytes or file extension
         detect_file_type_fallback(file_name, contents)
     };
     
@@ -42,7 +39,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         languages: Vec::new(),
         detected_symbols: Vec::new(),
         embedded_strings: extract_strings(contents),
-        suspected_secrets: Vec::new(), // Will be filled by separate endpoint
+        suspected_secrets: Vec::new(),
         imports: Vec::new(),
         exports: Vec::new(),
         hash_sha256: format!("{:x}", sha256_hash),
@@ -60,7 +57,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
     // Try different parsing strategies based on file type and magic bytes
     let mut parsed_successfully = false;
     
-    // Check for magic bytes to choose optimal parser
     if contents.len() >= 4 {
         match &contents[0..4] {
             [0x7f, b'E', b'L', b'F'] => {
@@ -85,7 +81,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
                             analysis.format = "macho-fat".to_string();
                             analysis.architecture = "multi".to_string();
                         }
-                        goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho)?,
+                        goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho, contents)?,
                     }
                     parsed_successfully = true;
                 }
@@ -100,7 +96,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         }
     }
     
-    // Fallback to generic goblin parsing if magic bytes didn't work
     if !parsed_successfully {
         tracing::debug!("No specific magic bytes found, attempting generic goblin parsing...");
         match GoblinObject::parse(contents) {
@@ -124,7 +119,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
                                 analysis.format = "macho-fat".to_string();
                                 analysis.architecture = "multi".to_string();
                             }
-                            goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho)?,
+                            goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho, contents)?,
                         }
                         parsed_successfully = true;
                     }
@@ -140,7 +135,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
             }
             Err(e) => {
                 tracing::debug!("Goblin parsing failed: {}, trying WebAssembly", e);
-                // Try WebAssembly parsing
                 if analyze_wasm(&mut analysis, contents).is_ok() {
                     tracing::info!("Successfully parsed as WebAssembly");
                     parsed_successfully = true;
@@ -149,7 +143,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         }
     }
     
-    // Final fallback
     if !parsed_successfully {
         tracing::info!("All specialized parsers failed, using generic analysis");
         analyze_unknown_binary(&mut analysis, contents)?;
@@ -167,6 +160,170 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
                    analysis.license_info.as_ref().map(|l| l.confidence).unwrap_or(0.0));
 
     Ok(analysis)
+}
+
+fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO, contents: &[u8]) -> anyhow::Result<()> {
+    analysis.format = "macho".to_string();
+
+    // Determine architecture
+    analysis.architecture = match macho.header.cputype() {
+        goblin::mach::constants::cputype::CPU_TYPE_X86_64 => "x86_64".to_string(),
+        goblin::mach::constants::cputype::CPU_TYPE_ARM64 => "aarch64".to_string(),
+        goblin::mach::constants::cputype::CPU_TYPE_X86 => "i386".to_string(),
+        _ => format!("unknown({})", macho.header.cputype()),
+    };
+
+    // Extract symbols (both regular and dynamic)
+    let mut symbol_set = HashSet::new();
+    if let Some(symbols) = &macho.symbols {
+        for symbol in symbols.iter() {
+            if let Ok((name, _)) = symbol {
+                if !name.is_empty() {
+                    symbol_set.insert(name.to_string());
+                    analysis.detected_symbols.push(name.to_string());
+                }
+            }
+        }
+    }
+
+    // Extract libraries and frameworks
+    for lib in &macho.libs {
+        let lib_name = lib.to_string();
+        analysis.linked_libraries.push(lib_name.clone());
+        // Add to embedded strings for version extraction
+        analysis.embedded_strings.push(lib_name.clone());
+        // Extract potential version info from library name (e.g., libcrypto.1.1.dylib)
+        if let Some(version) = extract_version_from_lib_name(&lib_name) {
+            analysis.embedded_strings.push(version);
+        }
+    }
+
+    // Use object crate for detailed import/export analysis
+    if let Ok(obj_file) = object::File::parse(contents) {
+        for symbol in obj_file.symbols() {
+            if let Ok(name) = symbol.name() {
+                if !name.is_empty() {
+                    if symbol.is_undefined() {
+                        analysis.imports.push(name.to_string());
+                        analysis.embedded_strings.push(name.to_string());
+                    } else if symbol.is_global() {
+                        analysis.exports.push(name.to_string());
+                    }
+                    symbol_set.insert(name.to_string());
+                }
+            }
+        }
+    }
+
+    // Extract additional metadata from load commands
+    let mut metadata = serde_json::json!({
+        "analysis_type": "macho",
+        "load_commands": [],
+        "frameworks": [],
+        "min_os_version": null,
+    });
+
+    // Process load commands for frameworks and version info
+    for lc in macho.load_commands.iter() {
+        match lc.command {
+            CommandVariant::LoadDylib(ref dylib) => {
+                let offset = dylib.dylib.name as usize;
+                if offset < contents.len() {
+                    let name_bytes = &contents[offset..];
+                    if let Some(end) = name_bytes.iter().position(|&b| b == 0) {
+                        if let Ok(name_str) = std::str::from_utf8(&name_bytes[..end]) {
+                            if name_str.contains(".framework") {
+                                metadata["frameworks"]
+                                    .as_array_mut()
+                                    .unwrap()
+                                    .push(serde_json::Value::String(name_str.to_string()));
+                                analysis.embedded_strings.push(name_str.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            CommandVariant::VersionMinMacosx(ref ver) => {
+                let (major, minor) = unpack_version(ver.version);
+                metadata["min_os_version"] = serde_json::Value::String(format!("{}.{}", major, minor));
+            }
+            CommandVariant::BuildVersion(ref build) => {
+                let (major, minor) = unpack_version(build.minos);
+                metadata["min_os_version"] = serde_json::Value::String(format!("{}.{}", major, minor));
+            }
+            _ => {}
+        }
+        metadata["load_commands"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::Value::String(format!("{:?}", lc.command)));
+    }
+
+    // Detect static linking
+    analysis.static_linked = macho.libs.is_empty() && symbol_set.iter().any(|s| s.contains("main"));
+
+    // Extract potential CPE identifiers for CVE matching
+    let cpe_candidates = extract_cpe_candidates(&analysis.linked_libraries, &analysis.imports, &analysis.detected_symbols);
+    analysis.metadata = serde_json::json!({
+        "macho_metadata": metadata,
+        "cpe_candidates": cpe_candidates,
+    });
+
+    tracing::info!(
+        "Mach-O analysis complete: {} symbols, {} libraries, {} imports, {} exports",
+        analysis.detected_symbols.len(),
+        analysis.linked_libraries.len(),
+        analysis.imports.len(),
+        analysis.exports.len()
+    );
+
+    Ok(())
+}
+
+// Helper function to extract version from library names
+fn extract_version_from_lib_name(lib_name: &str) -> Option<String> {
+    let parts: Vec<&str> = lib_name.split('.').collect();
+    for part in parts {
+        if part.chars().all(|c| c.is_digit(10) || c == '.') {
+            return Some(part.to_string());
+        }
+    }
+    None
+}
+
+// Helper function to unpack Mach-O version numbers (u32) into major and minor components
+fn unpack_version(version: u32) -> (u32, u32) {
+    let major = (version >> 16) & 0xFFFF;
+    let minor = (version >> 8) & 0xFF;
+    (major, minor)
+}
+
+// Helper function to generate CPE-like identifiers
+fn extract_cpe_candidates(libs: &[String], imports: &[String], symbols: &[String]) -> Vec<String> {
+    let mut cpes = HashSet::new();
+    for item in libs.iter().chain(imports.iter()).chain(symbols.iter()) {
+        let item_lower = item.to_lowercase();
+        // Example: Convert "libcrypto.1.1.dylib" to "cpe:2.3:a:openssl:openssl:1.1:*:*:*:*:*:*:*"
+        if item_lower.contains("openssl") || item_lower.contains("libcrypto") || item_lower.contains("libssl") {
+            if let Some(version) = extract_version_from_lib_name(&item_lower) {
+                cpes.insert(format!("cpe:2.3:a:openssl:openssl:{}:*:*:*:*:*:*:*", version));
+            } else {
+                cpes.insert("cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*".to_string());
+            }
+        }
+        // Add more CPE patterns for common libraries (e.g., zlib, curl)
+        if item_lower.contains("zlib") {
+            if let Some(version) = extract_version_from_lib_name(&item_lower) {
+                cpes.insert(format!("cpe:2.3:a:zlib:zlib:{}:*:*:*:*:*:*:*", version));
+            }
+        }
+        if item_lower.contains("curl") || item_lower.contains("libcurl") {
+            if let Some(version) = extract_version_from_lib_name(&item_lower) {
+                cpes.insert(format!("cpe:2.3:a:curl:curl:{}:*:*:*:*:*:*:*", version));
+            }
+        }
+    }
+    cpes.into_iter().collect()
 }
 
 fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> anyhow::Result<()> {
@@ -258,38 +415,6 @@ fn analyze_pe(analysis: &mut BinaryAnalysis, pe: &PE, _contents: &[u8]) -> anyho
 
     // PE files are typically dynamically linked if they have imports
     analysis.static_linked = pe.imports.is_empty();
-
-    Ok(())
-}
-
-fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO) -> anyhow::Result<()> {
-    analysis.format = "macho".to_string();
-    
-    // Determine architecture
-    analysis.architecture = match macho.header.cputype() {
-        goblin::mach::constants::cputype::CPU_TYPE_X86_64 => "x86_64".to_string(),
-        goblin::mach::constants::cputype::CPU_TYPE_ARM64 => "aarch64".to_string(),
-        goblin::mach::constants::cputype::CPU_TYPE_X86 => "i386".to_string(),
-        _ => format!("unknown({})", macho.header.cputype()),
-    };
-
-    // Extract symbols
-    if let Some(symbols) = &macho.symbols {
-        for symbol in symbols.iter() {
-            if let Ok((name, _)) = symbol {
-                analysis.detected_symbols.push(name.to_string());
-            }
-        }
-    }
-
-    // Extract libraries
-    for lib in &macho.libs {
-        analysis.linked_libraries.push(lib.to_string());
-        // Store library name for regex-based version extraction later
-        analysis.embedded_strings.push(lib.to_string());
-    }
-
-    analysis.static_linked = macho.libs.is_empty();
 
     Ok(())
 }

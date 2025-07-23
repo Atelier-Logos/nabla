@@ -104,17 +104,21 @@ pub fn collect_cpes(value: &Value, out: &mut Vec<String>) {
 /// Scan a `BinaryAnalysis` for potential vulnerabilities by matching linked libraries and import names
 /// against the locally cached NVD CVE database.
 pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<VulnerabilityMatch> {
-    let keywords: Vec<String> = analysis
+    let mut keywords: Vec<String> = analysis
         .linked_libraries
         .iter()
         .chain(analysis.imports.iter())
         .map(|s| s.to_lowercase())
         .collect();
 
+    // Add CPE candidates from metadata
+    if let Some(cpe_candidates) = analysis.metadata.get("cpe_candidates").and_then(|c| c.as_array()) {
+        keywords.extend(cpe_candidates.iter().filter_map(|c| c.as_str().map(|s| s.to_string())));
+    }
+
     let mut matches = Vec::new();
 
     for entry in CVE_DB.iter() {
-        // quick filter: see if any keyword is contained in description or cpe list
         for kw in &keywords {
             if kw.is_empty() {
                 continue;
@@ -127,7 +131,7 @@ pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<Vulnerabili
                     description: entry.description.clone(),
                     matched_keyword: kw.clone(),
                 });
-                break; // avoid duplicate matches for same entry
+                break;
             }
         }
     }
