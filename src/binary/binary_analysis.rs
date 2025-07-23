@@ -1,4 +1,4 @@
-use super::{BinaryAnalysis, extract_version_info, extract_license_info, generate_sbom};
+use super::{BinaryAnalysis, extract_version_info, extract_license_info};
 use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
@@ -165,19 +165,6 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
     tracing::info!("Metadata extraction complete: version_confidence={:.2}, license_confidence={:.2}", 
                    analysis.version_info.as_ref().map(|v| v.confidence).unwrap_or(0.0),
                    analysis.license_info.as_ref().map(|l| l.confidence).unwrap_or(0.0));
-
-    // Generate SBOM
-    tracing::debug!("Generating CycloneDX SBOM");
-    match generate_sbom(&analysis) {
-        Ok(sbom) => {
-            analysis.sbom = Some(sbom);
-            tracing::info!("SBOM generation successful");
-        }
-        Err(e) => {
-            tracing::warn!("SBOM generation failed: {}", e);
-            // Continue without SBOM rather than failing the whole analysis
-        }
-    }
 
     Ok(analysis)
 }

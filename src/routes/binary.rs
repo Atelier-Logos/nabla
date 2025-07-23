@@ -14,7 +14,7 @@ use serde_json::json;
 // Removed custom ResponseJson type alias
 use crate::{AppState, binary::{
     analyze_binary, BinaryAnalysis, 
-    generate_sbom, scan_binary_vulnerabilities, VulnerabilityMatch, 
+    scan_binary_vulnerabilities, VulnerabilityMatch, 
     attest_binary
 }};
 
