@@ -46,7 +46,7 @@ Uploads a binary and returns detailed metadata, a package list, and a CycloneDX 
 **Example:
 ```bash
 curl -X POST http://localhost:8080/binary/analyse \
-  -H "X-API-KEY: sk_..." \
+  -H "Authorization: Bearer your_license_key" \
   -F "file=@./your_binary"
 ```
 
@@ -79,10 +79,6 @@ curl -X POST http://localhost:8080/binary/analyse \
       "source": "extracted"
     }
   ],
-  "sbom": {
-    "cyclonedx": "{...}",  // JSON CycloneDX SBOM
-    "format": "application/json"
-  }
 }
 ```
 
@@ -94,7 +90,7 @@ Compares two binaries and returns metadata, symbol, and package-level difference
 **Example:
 ```bash
 curl -X POST http://localhost:8080/binary/diff \
-  -H "X-API-KEY: sk_..." \
+  -H "Authorization: Bearer your_license_key" \
   -F "file1=@old_binary" \
   -F "file2=@new_binary"
 ```
@@ -151,8 +147,9 @@ Generates a unsigned Sigstore-compatible attestation from the given binary.
 **Example:
 ```bash
 curl -X POST http://localhost:8080/binary/attest \
-  -H "X-API-KEY: sk_..." \
-  -F "file=@./my_binary"
+  -H "Authorization: Bearer your_license_key" \
+  -F "file=@./my_binary" \
+  -o attestation.json
 ```
 
 **Request Params:
@@ -203,7 +200,7 @@ Extracts known packages and checks them against a CVE database.
 **Example Request:
 ```bash
 curl -X POST http://localhost:8080/binary/check-cves \
-  -H "X-API-KEY: sk_..." \
+  -H "Authorization: Bearer your_license_key" \
   -F "file=@./my_binary"
 ```
 
@@ -257,14 +254,13 @@ Health check endpoint.
 ### Prerequisites
 
 - Rust 1.82+
-- PostgreSQL database (For API Key Handling)
+- A Nabla License Key
 
 ### Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-DATABASE_URL=YOUR_DATABASE_URL
 PORT=8080
 ```
 
@@ -286,7 +282,6 @@ cp .env.example .env
 Edit .env:
 
 ```env
-DATABASE_URL=postgres://...
 PORT=8080
 ```
 
@@ -300,7 +295,7 @@ Or with Docker:
 
 ```bash
 docker build -t nabla .
-docker run -p 8080:8080 -e DATABASE_URL=... nabla
+docker run -p 8080:8080 -e nabla
 ```
 
 ## License
