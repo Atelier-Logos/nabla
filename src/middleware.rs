@@ -18,7 +18,6 @@ use crate::AppState;
 #[derive(Debug, Deserialize, Clone)]
 pub struct LicenseClaims {
     pub sub: String,
-    pub aud: String,
     pub exp: usize,
     pub iat: usize,
     pub jti: String,
@@ -43,7 +42,7 @@ pub async fn validate_license_jwt(
     };
 
     // 2. Decode and validate JWT token using HMAC secret
-    let decoding_key = DecodingKey::from_secret(&*state.license_jwt_secret);
+    let decoding_key = DecodingKey::from_secret(&state.license_jwt_secret[..]);
     let validation = Validation::new(Algorithm::HS256);
 
     let token_data = match decode::<LicenseClaims>(&token, &decoding_key, &validation) {

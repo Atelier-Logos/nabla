@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use axum::body::to_bytes;
-    use nabla::{AppState, routes, database, config};
+    use nabla::{AppState, routes, config};
     use nabla::binary::attest_binary;
     use axum::{
         body::Body,
@@ -12,6 +12,8 @@ mod tests {
     use serde_json::Value;
     use std::io::Write;
     use tokio;
+    use std::sync::Arc;
+    use reqwest::Client;
 
     #[tokio::test]
     async fn test_attest_binary_success() {
