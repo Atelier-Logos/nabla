@@ -1,4 +1,4 @@
-FROM rust:1.82-slim AS builder
+FROM cgr.dev/chainguard/rust:latest AS builder
 WORKDIR /app
 
 # Set up build arguments and environment variables BEFORE copying code
