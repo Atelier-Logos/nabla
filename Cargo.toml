@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 # Web server framework
 axum = { version = "0.7", features = ["multipart", "macros"] }
-async-openai = "0.29"
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
@@ -40,12 +39,6 @@ syn = { version = "2.0", features = ["full", "parsing", "visit"] }
 # File system operations
 walkdir = "2.0"
 tempfile = "3.0"
-
-# Git operations
-git2 = { version = "0.18", default-features = false, features = ["vendored-libgit2"] }
-
-# TOML parsing
-toml = "0.8"
 
 # Regex for pattern matching
 regex = "1.0"

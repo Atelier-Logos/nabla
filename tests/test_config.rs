@@ -8,11 +8,15 @@ pub fn setup_test_environment() {
         // Set up test environment variables if not already set
         if env::var("LICENSE_SIGNING_KEY").is_err() {
             // Use a test key for testing - 32 bytes encoded in URL-safe base64 without padding
-            env::set_var("LICENSE_SIGNING_KEY", "dGVzdC1rZXktZm9yLXRlc3RpbmctcHVycG9zZXMtb25seS0zMg");
+            unsafe {
+                env::set_var("LICENSE_SIGNING_KEY", "dGVzdC1rZXktZm9yLXRlc3RpbmctcHVycG9zZXMtb25seS0zMg");
+            }
         }
         
         if env::var("RUST_LOG").is_err() {
-            env::set_var("RUST_LOG", "error");
+            unsafe {
+                env::set_var("RUST_LOG", "error");
+            }
         }
     });
 }

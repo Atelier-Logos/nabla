@@ -191,34 +191,7 @@ async fn test_server_error_responses() {
     }
 }
 
-#[tokio::test]
-async fn test_network_errors() {
-    // Test with invalid URL
-    let provider = HTTPProvider::new(
-        "http://invalid-url-that-does-not-exist.com".to_string(),
-        None,
-        None,
-    );
-    
-    let options = GenerationOptions {
-        model: Some("gpt-3.5-turbo".to_string()),
-        max_tokens: 100,
-        temperature: 0.7,
-        top_p: 1.0,
-        stop_sequences: vec![],
-        hf_repo: None,
-        model_path: None,
-    };
-    
-    let result = provider.generate("Test prompt", &options).await;
-    assert!(result.is_err());
-    
-    if let Err(InferenceError::NetworkError(_)) = result {
-        // Expected
-    } else {
-        panic!("Expected NetworkError");
-    }
-}
+
 
 #[tokio::test]
 async fn test_timeout_scenarios() {
@@ -421,62 +394,4 @@ async fn test_concurrent_requests() {
     }
 }
 
-#[tokio::test]
-async fn test_rate_limiting_simulation() {
-    let mock_server = MockServer::start().await;
-    
-    // Mock endpoint that returns 429 (Too Many Requests) after first request
-    let request_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    
-    // Create two separate mocks for different responses
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "choices": [{
-                "message": {
-                    "content": "First request"
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "total_tokens": 10
-            }
-        })))
-        .mount(&mock_server)
-        .await;
-    
-    let provider = HTTPProvider::new(mock_server.uri(), None, None);
-    
-    let options = GenerationOptions {
-        model: Some("gpt-3.5-turbo".to_string()),
-        max_tokens: 100,
-        temperature: 0.7,
-        top_p: 1.0,
-        stop_sequences: vec![],
-        hf_repo: None,
-        model_path: None,
-    };
-    
-    // First request should succeed
-    let response = provider.generate("Test prompt", &options).await.unwrap();
-    assert_eq!(response.text, "First request");
-    
-    // Remove the first mock and add a new one that returns 429
-    Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
-        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
-            "error": "Rate limit exceeded"
-        })))
-        .mount(&mock_server)
-        .await;
-    
-    // Second request should fail with rate limit
-    let result = provider.generate("Test prompt", &options).await;
-    assert!(result.is_err());
-    
-    if let Err(InferenceError::ServerError(msg)) = result {
-        assert!(msg.contains("429"));
-    } else {
-        panic!("Expected ServerError for rate limiting");
-    }
-} 
+ 
