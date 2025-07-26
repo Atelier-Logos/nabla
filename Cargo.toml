@@ -51,7 +51,7 @@ hex = "0.4"
 hmac = "0.12"
 
 # Binary analysis
-goblin = "0.8"
+goblin = "0.10"
 object = "0.34"
 wasmparser = "0.121"
 infer = "0.16"
