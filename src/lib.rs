@@ -4,9 +4,10 @@ pub mod config;
 pub mod routes;
 pub mod middleware;
 pub mod binary;
+pub mod providers; // Add this line
 
 // Re-export AppState so integration tests can build routers easily.
-use config::Config;
+pub use config::Config;
 use reqwest::Client;
 
 #[derive(Clone)]

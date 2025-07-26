@@ -18,13 +18,13 @@ use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    sub: String,
-    exp: usize,
-    iat: usize,
-    jti: String,
-    plan: String,
-    rate_limit: u32,
-    deployment_id: Option<Uuid>,
+    pub sub: String,
+    pub exp: usize,
+    pub iat: usize,
+    pub jti: String,
+    pub plan: String,
+    pub rate_limit: u32,
+    pub deployment_id: Option<Uuid>,
 }
 
 static RATE_LIMIT_MAP: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(|| DashMap::new());

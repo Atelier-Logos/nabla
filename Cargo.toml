@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Web server framework
-axum = { version = "0.7", features = ["multipart"] }
+axum = { version = "0.7", features = ["multipart", "macros"] }
 async-openai = "0.29"
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util"] }
@@ -55,6 +55,7 @@ sha2 = "0.10"
 blake3 = "1.5"
 base64 = "0.21"    # or latest
 hex = "0.4"
+hmac = "0.12"
 
 # Binary analysis
 goblin = "0.8"
@@ -98,6 +99,8 @@ rand = "0.8"
 jsonwebtoken = "9"
 ed25519-dalek = "2"
 clap = { version = "4", features = ["derive"] }
+lmcpp = "0.1.0"
+async-trait = "0.1"
 
 [dev-dependencies]
 hyper = { version = "0.14.12", features = ["full"] }
@@ -106,3 +109,7 @@ http-body-util = "0.1"
 bytes = "1"
 multer = "3" 
 mockall = "0.12"
+wiremock = "0.6"
+axum-test = "15"
+futures = "0.3"
+tempfile = "3.0"

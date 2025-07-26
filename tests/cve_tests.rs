@@ -55,5 +55,5 @@ fn test_scan_binary_vulnerabilities() {
 
     let matches = scan_binary_vulnerabilities(&analysis);
     // We can't guarantee OpenSSL is present, but the function should run without error.
-    assert!(matches.len() >= 0);
+    assert!(matches.len() >= 0); // This is always true, but kept for clarity
 } 

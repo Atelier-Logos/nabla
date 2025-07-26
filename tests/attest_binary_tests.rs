@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use axum::body::to_bytes;
-    use nabla::{AppState, routes, config};
+    use nabla::{AppState, config};
     use nabla::binary::attest_binary;
     use axum::{
         body::Body,

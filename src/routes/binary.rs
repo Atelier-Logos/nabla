@@ -4,10 +4,13 @@ use axum::{
     response::Json,
     http::StatusCode,
 };
-use serde::{Serialize};
+use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-use serde_json::json;
+use serde_json::{json, Value};
 use anyhow::{Result};
+
+// Add this line to import the inference module
+use crate::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse};
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
@@ -32,6 +35,25 @@ pub struct ErrorResponse {
 #[derive(Debug, Serialize)]
 pub struct CveScanResponse {
     pub matches: Vec<VulnerabilityMatch>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChatRequest {
+    pub file_path: String,              // Path to the file instead of raw content
+    pub question: String,
+    pub model_path: Option<String>,     // For local GGUF files
+    pub hf_repo: Option<String>,        // For remote HF repos
+    pub provider: String,               // "http" for HTTP provider
+    pub inference_url: Option<String>,  // URL for the inference server
+    pub provider_token: Option<String>, // Token for third-party authentication
+    pub options: Option<GenerationOptions>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChatResponse {
+    pub answer: String,
+    pub model_used: String,
+    pub tokens_used: usize,
 }
 
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -212,7 +234,7 @@ pub async fn check_cve(
 pub async fn diff_binaries(
     State(_state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     // Extract two files
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     while let Some(field) = multipart.next_field().await.map_err(|e| {
@@ -302,4 +324,160 @@ pub async fn diff_binaries(
     meta.insert("symbols_removed".to_string(), serde_json::json!(symbols_removed));
 
     Ok(Json(meta.into()))
+}
+
+#[axum::debug_handler]
+pub async fn chat_with_binary(
+    State(_state): State<AppState>,
+    Json(request): Json<ChatRequest>,
+) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Read file from path
+    let file_content = tokio::fs::read(&request.file_path).await.map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_read_error".to_string(),
+                message: format!("Failed to read file '{}': {}", request.file_path, e),
+            }),
+        )
+    })?;
+    
+    let file_name = std::path::Path::new(&request.file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    
+    let analysis = analyze_binary(&file_name, &file_content).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
+            }),
+        )
+    })?;
+    
+    // Store model info before moving values
+    let model_used = request.hf_repo.as_ref()
+        .or(request.model_path.as_ref())
+        .map(|s| s.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+    
+    // Handle inference with HTTP provider
+    let response = match request.provider.as_str() {
+        "http" => {
+            let inference_url = request.inference_url
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            
+            let provider = HTTPProvider::new(inference_url, None, request.provider_token);
+            
+            let mut options = request.options.unwrap_or_default();
+            options.model_path = request.model_path;
+            options.hf_repo = request.hf_repo;
+            // Note: options.model is already set from the request.options if provided
+            
+            chat_with_provider(&analysis, &request.question, &provider, &options).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: "inference_error".to_string(),
+                        message: format!("Failed to chat with binary: {}", e),
+                    }),
+                )
+            })?
+        }
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_provider".to_string(),
+                    message: "Provider must be 'http'".to_string(),
+                }),
+            ));
+        }
+    };
+    
+    Ok(Json(ChatResponse { 
+        answer: response.text,
+        model_used,
+        tokens_used: response.tokens_used,
+    }))
+}
+
+async fn chat_with_provider(
+    analysis: &BinaryAnalysis,
+    user_question: &str,
+    provider: &dyn InferenceProvider,
+    options: &GenerationOptions,
+) -> Result<GenerationResponse, anyhow::Error> {
+    // Check if the question asks for JSON output
+    let is_json_request = user_question.to_lowercase().contains("json") || 
+                         user_question.to_lowercase().contains("sbom") ||
+                         user_question.to_lowercase().contains("cyclonedx");
+    
+    let context = if is_json_request {
+        format!(
+            "Binary Analysis Context:\n\
+             - File: {}\n\
+             - Format: {}\n\
+             - Architecture: {}\n\
+             - Size: {} bytes\n\
+             - Linked Libraries: {}\n\
+             - Imports: {}\n\
+             - Exports: {}\n\
+             - Embedded Strings: {}\n\n\
+             User Question: {}\n\n\
+             CRITICAL: You must return ONLY raw JSON. Do NOT wrap it in quotes or escape it as a string. Return the actual JSON object directly. Do not include any explanations, markdown, or code blocks. The response should start with {{ and end with }}.",
+            analysis.file_name,
+            analysis.format,
+            analysis.architecture,
+            analysis.size_bytes,
+            analysis.linked_libraries.join(", "),
+            analysis.imports.join(", "),
+            analysis.exports.join(", "),
+            analysis.embedded_strings.join(", "),
+            user_question
+        )
+    } else {
+        format!(
+        "Binary Analysis Context:\n\
+         - File: {}\n\
+         - Format: {}\n\
+         - Architecture: {}\n\
+         - Size: {} bytes\n\
+         - Linked Libraries: {}\n\
+         - Imports: {}\n\
+         - Exports: {}\n\
+         - Embedded Strings: {}\n\n\
+         User Question: {}\n\n\
+         Please provide a helpful answer about this binary based on the analysis data.",
+        analysis.file_name,
+        analysis.format,
+        analysis.architecture,
+        analysis.size_bytes,
+        analysis.linked_libraries.join(", "),
+        analysis.imports.join(", "),
+        analysis.exports.join(", "),
+        analysis.embedded_strings.join(", "),
+        user_question
+        )
+    };
+    
+    let mut response = provider.generate(&context, options).await
+        .map_err(|e| anyhow::anyhow!("Inference failed: {}", e))?;
+    
+    // Post-process JSON responses to handle cases where the model returns JSON as a string
+    if is_json_request {
+        let text = response.text.trim();
+        // If the response looks like a JSON string (starts and ends with quotes), try to parse it
+        if text.starts_with('"') && text.ends_with('"') {
+            if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(text) {
+                response.text = serde_json::to_string(&parsed_json)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))?;
+            }
+        }
+    }
+    
+    Ok(response)
 }

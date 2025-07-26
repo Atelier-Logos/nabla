@@ -15,16 +15,19 @@ mod config;
 mod routes;
 mod middleware;
 mod binary;
+mod providers;
 
 use config::Config;
 use middleware::validate_license_jwt;
 
+// src/main.rs - update AppState
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
-    pub client: Client, // Add client field
-    pub base_url: String, // Add base_url field
+    pub client: Client,
+    pub base_url: String,
     pub license_jwt_secret: Arc<[u8; 32]>,
+    // Remove inference_manager field
 }
 
 #[tokio::main]
@@ -55,20 +58,18 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::new();
 
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
-    // Skip migrations since tables already exist
-
     // Configure CORS
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
-
     // Build the shared application state
     let state = AppState {
         config: config.clone(),
         client,
         base_url,
         license_jwt_secret,
+        // Remove inference_manager - we'll handle it in the routes
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
@@ -83,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/binary/diff", post(routes::diff_binaries))
         .route("/binary/attest", post(binary::attest_binary))
         .route("/binary/check-cves", post(routes::check_cve))
+        .route("/binary/chat", post(routes::chat_with_binary))
         .route_layer(auth_layer);
 
     // Build the main app router

@@ -4,16 +4,16 @@ use axum::{
     response::Json,
     http::StatusCode,
 };
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use crate::AppState;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MultipartDebugInfo {
     pub fields: Vec<FieldInfo>,
     pub total_fields: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FieldInfo {
     pub field_name: String,
     pub filename: Option<String>,
