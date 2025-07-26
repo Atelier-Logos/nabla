@@ -272,7 +272,7 @@ curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_path": "utility_bins/vulnerable_elf",
+    "file_path": "path/to/your/binary",
     "question": "Generate a CycloneDX SBOM for this binary",
     "provider": "http",
     "inference_url": "https://api.together.xyz",
@@ -303,7 +303,7 @@ curl -X POST http://localhost:8080/binary/chat \
 curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"file_path": "utility_bins/vulnerable_elf", "question": "Generate a CycloneDX SBOM for this binary", "provider": "http", "inference_url": "https://api.together.xyz", "provider_token": "YOUR_TOGETHER_API_KEY", "options": {"max_tokens": 4096, "temperature": 0.1, "top_p": 0.9, "model": "moonshotai/Kimi-K2-Instruct", "stop_sequences": []}}' | \
+  -d '{"file_path": "path/to/your/binary", "question": "Generate a CycloneDX SBOM for this binary", "provider": "http", "inference_url": "https://api.together.xyz", "provider_token": "YOUR_TOGETHER_API_KEY", "options": {"max_tokens": 4096, "temperature": 0.1, "top_p": 0.9, "model": "moonshotai/Kimi-K2-Instruct", "stop_sequences": []}}' | \
 jq -r '.answer' > sbom.json
 ```
 
@@ -346,7 +346,7 @@ curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_path": "utility_bins/vulnerable_elf",
+    "file_path": "path/to/your/binary",
     "question": "Generate a CycloneDX SBOM for this binary. Output ONLY the JSON structure.",
     "provider": "http",
     "inference_url": "http://localhost:11434",
@@ -367,7 +367,7 @@ curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_path": "utility_bins/vulnerable_elf",
+    "file_path": "path/to/your/binary",
     "question": "Generate a CycloneDX SBOM for this binary. Output ONLY the JSON structure.",
     "provider": "http",
     "inference_url": "https://your-remote-server.com",
@@ -389,7 +389,7 @@ curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_path": "utility_bins/vulnerable_elf",
+    "file_path": "path/to/your/binary",
     "question": "Generate a CycloneDX SBOM for this binary. Output ONLY the JSON structure.",
     "provider": "http",
     "inference_url": "http://localhost:11434",
@@ -410,7 +410,7 @@ curl -X POST http://localhost:8080/binary/chat \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "file_path": "utility_bins/vulnerable_elf",
+    "file_path": "path/to/your/binary",
     "question": "Generate a CycloneDX SBOM for this binary. Output ONLY the JSON structure.",
     "provider": "http",
     "inference_url": "https://api.together.xyz",
