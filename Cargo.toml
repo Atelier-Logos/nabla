@@ -69,7 +69,7 @@ quote = "1.0"
 # json = "0.12"  # Removed due to RUSTSEC-2022-0081 vulnerability
 
 # Additional dependencies for which crate
-which = "4.4"
+which = "8.0"
 
 # For resolving the home directory
 home = "0.5"
