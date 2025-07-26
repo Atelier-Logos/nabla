@@ -83,7 +83,7 @@ url = "2.4"
 
 # Concurrency utilities for in-memory rate limiting
 once_cell = "1.19"
-dashmap = "5.5" 
+dashmap = "6.1" 
 
 # Additional dependencies for base64ct
 base64ct = "=1.7.3" 
