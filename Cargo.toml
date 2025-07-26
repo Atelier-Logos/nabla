@@ -99,7 +99,6 @@ rand = "0.8"
 jsonwebtoken = "9"
 ed25519-dalek = "2"
 clap = { version = "4", features = ["derive"] }
-lmcpp = "0.1.0"
 async-trait = "0.1"
 
 [dev-dependencies]
