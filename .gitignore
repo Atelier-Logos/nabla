@@ -19,7 +19,12 @@ Cargo.lock
 .env
 .DS_Store
 **/bin/*
-
+demo_script.sh
+demo_request.json
+chat_request.json
+sbom.json
+MobiFlightWasmModule.wasm
+demo_files/
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
