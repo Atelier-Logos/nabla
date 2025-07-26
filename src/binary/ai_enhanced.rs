@@ -1,5 +1,6 @@
 // src/binary/ai_enhanced.rs
-use crate::inference::{InferenceProvider, GenerationOptions, GenerationResponse};
+use crate::providers::{InferenceProvider, GenerationOptions, GenerationResponse};
+use crate::binary::BinaryAnalysis;
 
 pub async fn generate_sbom_from_analysis(
     analysis: &BinaryAnalysis,
