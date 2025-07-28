@@ -56,6 +56,10 @@ base64 = "0.21"    # or latest
 hex = "0.4"
 hmac = "0.12"
 
+# FIPS 140-3 key derivation
+pbkdf2 = { version = "0.12", features = ["simple"] }
+hkdf = "0.12"
+
 # Binary analysis
 goblin = "0.8"
 object = "0.34"

@@ -57,7 +57,7 @@ pub struct ChatResponse {
 }
 
 pub async fn health_check(
-    State(state): State<AppState>,
+    State(mut state): State<AppState>,
 ) -> Json<serde_json::Value> {
     let fips_status = if state.config.fips_mode {
         state.crypto_provider.validate_fips_compliance().is_ok()

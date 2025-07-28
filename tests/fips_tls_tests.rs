@@ -1,8 +1,7 @@
 // tests/fips_tls_tests.rs
 
 use nabla::crypto::CryptoProvider;
-use rustls::{ServerConfig, ClientConfig, Certificate, PrivateKey};
-use std::path::Path;
+use rustls::{Certificate, PrivateKey};
 
 #[test]
 fn test_fips_crypto_provider_creation() {
@@ -17,22 +16,22 @@ fn test_fips_crypto_provider_creation() {
 
 #[test]
 fn test_fips_compliance_validation() {
-    let provider = CryptoProvider::new(true, true);
+    let mut provider = CryptoProvider::new(true, true);
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
     
-    let provider = CryptoProvider::new(false, true);
+    let mut provider = CryptoProvider::new(false, true);
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_fips_tls_compliance_validation() {
-    let provider = CryptoProvider::new(true, true);
+    let mut provider = CryptoProvider::new(true, true);
     let result = provider.validate_fips_tls_compliance();
     assert!(result.is_ok());
     
-    let provider = CryptoProvider::new(false, true);
+    let mut provider = CryptoProvider::new(false, true);
     let result = provider.validate_fips_tls_compliance();
     assert!(result.is_ok());
 }

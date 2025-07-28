@@ -9,6 +9,17 @@ pub struct Config {
     pub fips_validation: bool,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            port: 8080,
+            base_url: "http://localhost:8080".to_string(),
+            fips_mode: false,
+            fips_validation: false,
+        }
+    }
+}
+
 impl Config {
     pub fn from_env() -> Result<Self> {
         dotenvy::dotenv().ok();

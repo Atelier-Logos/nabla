@@ -33,6 +33,12 @@ pub async fn validate_license_jwt(
     request: Request,
     next: Next,
 ) -> Result<Response, impl IntoResponse> {
+    // Check if FIPS mode is enabled - if not, skip authentication
+    if !state.config.fips_mode {
+        tracing::info!("FIPS mode disabled - skipping authentication");
+        return Ok(next.run(request).await);
+    }
+
     // 1. Extract Authorization header
     let auth_header = request
         .headers()
@@ -44,7 +50,7 @@ pub async fn validate_license_jwt(
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
                     "error": "missing_authorization",
-                    "message": "Missing or invalid Authorization header"
+                    "message": "Missing or invalid Authorization header (required in FIPS mode)"
                 }))
             )
         })?;

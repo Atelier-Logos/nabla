@@ -18,6 +18,8 @@ mod binary;
 mod providers;
 mod crypto;
 
+use providers::InferenceManager;
+
 use config::Config;
 use middleware::validate_license_jwt;
 
@@ -29,7 +31,7 @@ pub struct AppState {
     pub base_url: String,
     pub license_jwt_secret: Arc<[u8; 32]>,
     pub crypto_provider: crypto::CryptoProvider,
-    // Remove inference_manager field
+    pub inference_manager: Arc<InferenceManager>,
 }
 
 #[tokio::main]
@@ -58,13 +60,13 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     
     // Initialize crypto provider with FIPS configuration
-    let crypto_provider = crypto::CryptoProvider::new(config.fips_mode, config.fips_validation);
+    let mut crypto_provider = crypto::CryptoProvider::new(config.fips_mode, config.fips_validation);
     
     // Validate FIPS compliance on startup if enabled
     if config.fips_mode {
         crypto_provider.validate_fips_compliance()?;
         crypto_provider.validate_fips_tls_compliance()?;
-        tracing::info!("FIPS mode enabled - using FIPS 140-2 compliant algorithms");
+        tracing::info!("FIPS 140-3 mode enabled - using FIPS 140-3 compliant algorithms and enhanced security controls");
     } else {
         tracing::info!("Standard mode enabled - using performance-optimized algorithms");
     }
@@ -93,6 +95,9 @@ async fn main() -> anyhow::Result<()> {
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+    // Initialize inference manager
+    let inference_manager = Arc::new(InferenceManager::new());
+    
     // Build the shared application state
     let state = AppState {
         config: config.clone(),
@@ -100,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
         base_url,
         license_jwt_secret,
         crypto_provider,
-        // Remove inference_manager - we'll handle it in the routes
+        inference_manager,
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
