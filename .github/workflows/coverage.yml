@@ -24,7 +24,8 @@ jobs:
       - name: Checkout code with submodules
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
-          submodules: recursive  # This is the key fix!
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
