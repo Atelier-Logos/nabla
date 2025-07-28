@@ -1,0 +1,3 @@
+[submodule "src/crypto"]
+	path = src/crypto
+	url = https://github.com/Atelier-Logos/nabla-enterprise.git
