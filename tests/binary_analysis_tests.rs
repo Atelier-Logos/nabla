@@ -6,7 +6,7 @@ use tokio;
 
 // Helper function to create a test crypto provider
 fn create_test_crypto_provider() -> CryptoProvider {
-    CryptoProvider::new(false, false).unwrap() // Use standard mode for tests
+    CryptoProvider::new(false, false) // Use standard mode for tests
 }
 
 #[tokio::test]

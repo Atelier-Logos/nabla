@@ -735,7 +735,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_empty() {
-        let crypto_provider = CryptoProvider::new(false, false).unwrap();
+        let crypto_provider = CryptoProvider::new(false, false);
         let result = analyze_binary("test.bin", &[], &crypto_provider).await;
         assert!(result.is_ok());
         let analysis = result.unwrap();
