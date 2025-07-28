@@ -5,7 +5,8 @@ pub mod routes;
 pub mod middleware;
 pub mod binary;
 pub mod providers;
-pub mod enterprise; // Add enterprise module
+#[path = "enterprise/crypto/mod.rs"]  
+pub mod crypto;
 
 // Re-export AppState so integration tests can build routers easily.
 pub use config::Config;
