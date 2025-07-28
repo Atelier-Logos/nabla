@@ -2,7 +2,7 @@ use nabla::enterprise::CryptoProvider;
 
 #[test]
 fn test_fips_initialization() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     
     // Test FIPS initialization
     let result = crypto_provider.initialize();
@@ -15,7 +15,7 @@ fn test_fips_initialization() {
 
 #[test]
 fn test_fips_status() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     crypto_provider.initialize().unwrap();
     
     let status = crypto_provider.get_fips_status();
@@ -35,10 +35,10 @@ fn test_fips_status() {
 
 #[test]
 fn test_key_derivation_pbkdf2() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     
     let password = b"test_password";
-    let salt = b"test_salt";
+    let salt = b"test_salt_1234567890"; // 20 bytes to meet FIPS minimum of 16
     let iterations = 10000;
     let key_len = 32;
     
@@ -54,10 +54,10 @@ fn test_key_derivation_pbkdf2() {
 
 #[test]
 fn test_key_derivation_hkdf() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     
     let secret = b"test_secret";
-    let salt = b"test_salt";
+    let salt = b"test_salt_1234567890"; // 20 bytes to meet FIPS minimum of 16
     let info = b"test_info";
     let key_len = 32;
     
@@ -73,7 +73,7 @@ fn test_key_derivation_hkdf() {
 
 #[test]
 fn test_fips_requires_fips_mode() {
-    let mut crypto_provider = CryptoProvider::new(false, false);
+    let mut crypto_provider = CryptoProvider::new(false, false).unwrap();
     
     // FIPS initialization should fail when FIPS mode is disabled
     let result = crypto_provider.initialize();
@@ -83,7 +83,7 @@ fn test_fips_requires_fips_mode() {
 
 #[test]
 fn test_self_tests_integration() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     
     // Test that hash functions work correctly
     let test_data = b"test_data";
@@ -103,7 +103,7 @@ fn test_self_tests_integration() {
 
 #[test]
 fn test_fips_serialization() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     crypto_provider.initialize().unwrap();
     
     let status = crypto_provider.get_fips_status();

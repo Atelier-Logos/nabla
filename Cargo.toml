@@ -60,6 +60,9 @@ hmac = "0.12"
 pbkdf2 = { version = "0.12", features = ["simple"] }
 hkdf = "0.12"
 
+# OpenSSL for FIPS compliance
+openssl = "0.10"
+
 # Binary analysis
 goblin = "0.8"
 object = "0.34"
