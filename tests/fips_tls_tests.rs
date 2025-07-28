@@ -1,6 +1,6 @@
 // tests/fips_tls_tests.rs
 
-use nabla::crypto::CryptoProvider;
+use nabla::enterprise::CryptoProvider;
 use rustls::{Certificate, PrivateKey};
 
 #[test]

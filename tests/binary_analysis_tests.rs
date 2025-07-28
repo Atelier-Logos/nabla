@@ -1,7 +1,7 @@
 // tests/binary_analysis_tests.rs
 
 use nabla::binary::{analyze_binary, BinaryAnalysis, metadata_extractor::{VersionInfo, LicenseInfo}};
-use nabla::crypto::CryptoProvider;
+use nabla::enterprise::CryptoProvider;
 use tokio;
 
 // Helper function to create a test crypto provider
