@@ -31,7 +31,7 @@ async fn test_middleware_fips_mode_enabled() {
         client: reqwest::Client::new(),
         base_url: "http://localhost:8080".to_string(),
         license_jwt_secret: Arc::new([0u8; 32]),
-        crypto_provider: nabla::enterprise::CryptoProvider::new(true, true).unwrap(),
+        crypto_provider: nabla::enterprise::crypto::CryptoProvider::new(true, true).unwrap(),
     };
 
     let app = Router::new()
@@ -65,7 +65,7 @@ async fn test_middleware_fips_mode_disabled() {
         client: reqwest::Client::new(),
         base_url: "http://localhost:8080".to_string(),
         license_jwt_secret: Arc::new([0u8; 32]),
-        crypto_provider: nabla::enterprise::CryptoProvider::new(false, false).unwrap(),
+        crypto_provider: nabla::enterprise::crypto::CryptoProvider::new(false, false).unwrap(),
     };
 
     let app = Router::new()

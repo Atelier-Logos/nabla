@@ -30,7 +30,7 @@ pub struct AppState {
     pub client: Client,
     pub base_url: String,
     pub license_jwt_secret: Arc<[u8; 32]>,
-    pub crypto_provider: enterprise::CryptoProvider,
+    pub crypto_provider: enterprise::crypto::CryptoProvider,
     pub inference_manager: Arc<InferenceManager>,
 }
 
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     
     // Initialize crypto provider with FIPS configuration
-    let mut crypto_provider = enterprise::CryptoProvider::new(config.fips_mode, config.fips_validation)?;
+    let mut crypto_provider = enterprise::crypto::CryptoProvider::new(config.fips_mode, config.fips_validation)?;
     
     // Validate FIPS compliance on startup if enabled
     if config.fips_mode {

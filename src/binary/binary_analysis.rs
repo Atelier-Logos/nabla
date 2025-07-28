@@ -7,7 +7,7 @@ use object::{Object, ObjectSymbol};
 use wasmparser::{Parser, Payload};
 use infer;
 use std::collections::HashSet;
-use crate::enterprise::CryptoProvider;
+use crate::enterprise::crypto::CryptoProvider;
 
 pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &CryptoProvider) -> anyhow::Result<BinaryAnalysis> {
     tracing::info!("Starting binary analysis for '{}' ({} bytes)", file_name, contents.len());

@@ -5,6 +5,7 @@ pub mod routes;
 pub mod middleware;
 pub mod binary;
 pub mod providers;
+pub mod enterprise;
 #[path = "enterprise/crypto/mod.rs"]  
 pub mod crypto;
 
@@ -18,7 +19,7 @@ pub struct AppState {
     pub client: Client,
     pub base_url: String,
     pub license_jwt_secret: Arc<[u8; 32]>,
-    pub crypto_provider: enterprise::CryptoProvider,
+    pub crypto_provider: enterprise::crypto::CryptoProvider,
 }
 
 // For binary crate main.rs we still have its own AppState; To avoid duplication, we
