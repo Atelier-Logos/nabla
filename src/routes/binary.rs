@@ -56,17 +56,51 @@ pub struct ChatResponse {
     pub tokens_used: usize,
 }
 
-pub async fn health_check() -> Json<serde_json::Value> {
+pub async fn health_check(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let fips_status = if state.config.fips_mode {
+        state.crypto_provider.validate_fips_compliance().is_ok()
+    } else {
+        false
+    };
+
+    let fips_details = if state.config.fips_mode {
+        json!({
+            "fips_mode": true,
+            "fips_compliant": fips_status,
+            "fips_validation": state.config.fips_validation,
+            "approved_algorithms": [
+                "SHA-256",
+                "SHA-512", 
+                "HMAC-SHA256",
+                "AES-256-GCM",
+                "TLS13_AES_256_GCM_SHA384"
+            ],
+            "hash_algorithm": "SHA-512",
+            "random_generator": "FIPS-compliant OS RNG"
+        })
+    } else {
+        json!({
+            "fips_mode": false,
+            "fips_compliant": false,
+            "fips_validation": false,
+            "hash_algorithm": "Blake3",
+            "random_generator": "Standard RNG"
+        })
+    };
+
     Json(json!({
         "status": "healthy",
         "service": "Nabla",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "fips": fips_details
     }))
 }
 
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
@@ -138,7 +172,7 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
     
     // Analyze the binary
-    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider).await.map_err(|e| {
         tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -162,7 +196,7 @@ pub async fn upload_and_analyze_binary(
 }
 
 pub async fn check_cve(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
     tracing::info!("check_cve handler called");
@@ -210,7 +244,7 @@ pub async fn check_cve(
         ));
     }
 
-    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider).await.map_err(|e| {
         tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -232,7 +266,7 @@ pub async fn check_cve(
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     // Extract two files
@@ -270,7 +304,7 @@ pub async fn diff_binaries(
     }
 
     // Analyze each binary to get symbol information
-    let analysis1 = analyze_binary(&files[0].0, &files[0].1).await.map_err(|e| {
+    let analysis1 = analyze_binary(&files[0].0, &files[0].1, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -280,7 +314,7 @@ pub async fn diff_binaries(
         )
     })?;
 
-    let analysis2 = analyze_binary(&files[1].0, &files[1].1).await.map_err(|e| {
+    let analysis2 = analyze_binary(&files[1].0, &files[1].1, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -328,17 +362,17 @@ pub async fn diff_binaries(
 
 #[axum::debug_handler]
 pub async fn chat_with_binary(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(request): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Validate and sanitize the file path
-    let path = std::path::Path::new(&request.file_path);
+        let path = std::path::Path::new(&request.file_path);
     
     // 1. Check for path traversal attempts
-    if path.components().any(|c| c == std::path::Component::ParentDir) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
+        if path.components().any(|c| c == std::path::Component::ParentDir) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
                 error: "invalid_path".to_string(),
                 message: "Path traversal not allowed".to_string(),
             }),
@@ -387,9 +421,9 @@ pub async fn chat_with_binary(
             Json(ErrorResponse {
                 error: "not_a_file".to_string(),
                 message: format!("Path is not a file: {}", request.file_path),
-            }),
-        ));
-    }
+                }),
+            ));
+        }
     
     // 6. Read the file
     let file_content = tokio::fs::read(&full_path).await.map_err(|e| {
@@ -409,7 +443,7 @@ pub async fn chat_with_binary(
         .unwrap_or("unknown")
         .to_string();
     
-    let analysis = analyze_binary(&file_name, &file_content).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &file_content, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

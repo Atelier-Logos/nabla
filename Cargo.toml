@@ -21,6 +21,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # HTTP client
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "multipart"] }
 
+# FIPS-compliant TLS support
+rustls = "0.21"
+rustls-pemfile = "1.0"
+webpki-roots = "0.25"
+hyper-rustls = "0.24"
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"

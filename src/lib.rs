@@ -4,7 +4,8 @@ pub mod config;
 pub mod routes;
 pub mod middleware;
 pub mod binary;
-pub mod providers; // Add this line
+pub mod providers;
+pub mod crypto; // Add crypto module
 
 // Re-export AppState so integration tests can build routers easily.
 pub use config::Config;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub client: Client,
     pub base_url: String,
     pub license_jwt_secret: Arc<[u8; 32]>,
+    pub crypto_provider: crypto::CryptoProvider,
 }
 
 // For binary crate main.rs we still have its own AppState; To avoid duplication, we

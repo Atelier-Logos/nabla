@@ -1,12 +1,19 @@
 // tests/binary_analysis_tests.rs
 
 use nabla::binary::{analyze_binary, BinaryAnalysis, metadata_extractor::{VersionInfo, LicenseInfo}};
+use nabla::crypto::CryptoProvider;
 use tokio;
+
+// Helper function to create a test crypto provider
+fn create_test_crypto_provider() -> CryptoProvider {
+    CryptoProvider::new(false, false) // Use standard mode for tests
+}
 
 #[tokio::test]
 async fn test_analyze_binary_small_file() {
     let data = b"hello world"; // small, triggers small file path
-    let analysis = analyze_binary("hello.txt", data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary("hello.txt", data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "hello.txt");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -14,7 +21,8 @@ async fn test_analyze_binary_small_file() {
 #[tokio::test]
 async fn test_analyze_binary_empty_file() {
     let data = b"";
-    let analysis = analyze_binary("empty.bin", data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary("empty.bin", data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "empty.bin");
     assert_eq!(analysis.size_bytes, 0);
     assert_eq!(analysis.embedded_strings.len(), 0);
@@ -24,7 +32,8 @@ async fn test_analyze_binary_empty_file() {
 async fn test_analyze_binary_large_file() {
     // Create a larger file to test different code paths
     let data = vec![0u8; 10000]; // 10KB file
-    let analysis = analyze_binary("large.bin", &data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary("large.bin", &data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "large.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -32,7 +41,8 @@ async fn test_analyze_binary_large_file() {
 #[tokio::test]
 async fn test_analyze_binary_with_special_chars() {
     let data = b"test data with special chars: !@#$%^&*()";
-    let analysis = analyze_binary("special@chars#file.bin", data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary("special@chars#file.bin", data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "special@chars#file.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -40,7 +50,8 @@ async fn test_analyze_binary_with_special_chars() {
 #[tokio::test]
 async fn test_analyze_binary_unicode_filename() {
     let data = b"test data";
-    let analysis = analyze_binary("测试文件.bin", data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary("测试文件.bin", data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "测试文件.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -49,7 +60,8 @@ async fn test_analyze_binary_unicode_filename() {
 async fn test_analyze_binary_very_long_filename() {
     let data = b"test data";
     let long_name = "a".repeat(255); // Very long filename
-    let analysis = analyze_binary(&long_name, data).await.expect("analyze_binary failed");
+    let crypto_provider = create_test_crypto_provider();
+    let analysis = analyze_binary(&long_name, data, &crypto_provider).await.expect("analyze_binary failed");
     assert_eq!(analysis.file_name, long_name);
     assert_eq!(analysis.size_bytes as usize, data.len());
 }

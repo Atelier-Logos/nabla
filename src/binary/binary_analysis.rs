@@ -2,24 +2,24 @@ use super::{BinaryAnalysis, extract_version_info, extract_license_info};
 use chrono::Utc;
 use uuid::Uuid;
 use sha2::{Sha256, Digest};
-use blake3;
 use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::{MachO, load_command::CommandVariant}};
 use object::{Object, ObjectSymbol};
 use wasmparser::{Parser, Payload};
 use infer;
 use std::collections::HashSet;
+use crate::crypto::CryptoProvider;
 
-pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<BinaryAnalysis> {
+pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &CryptoProvider) -> anyhow::Result<BinaryAnalysis> {
     tracing::info!("Starting binary analysis for '{}' ({} bytes)", file_name, contents.len());
     
     // Early validation for very small files
     if contents.len() < 50 {
         tracing::warn!("File is very small ({} bytes), likely not a binary executable", contents.len());
-        return analyze_small_file(file_name, contents);
+        return analyze_small_file(file_name, contents, crypto_provider);
     }
     
     let sha256_hash = Sha256::digest(contents);
-    let blake3_hash = blake3::hash(contents);
+    let alternative_hash = crypto_provider.hash_alternative(contents)?;
     
     // Detect file type with more detailed logging
     let detected_type = infer::get(contents);
@@ -43,13 +43,16 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8]) -> anyhow::Result<
         imports: Vec::new(),
         exports: Vec::new(),
         hash_sha256: format!("{:x}", sha256_hash),
-        hash_blake3: Some(blake3_hash.to_hex().to_string()),
+        hash_blake3: Some(hex::encode(&alternative_hash)),
         size_bytes: contents.len() as u64,
         linked_libraries: Vec::new(),
         static_linked: false,
         version_info: None,
         license_info: None,
-        metadata: serde_json::json!({}),
+        metadata: serde_json::json!({
+            "fips_mode": crypto_provider.fips_enabled,
+            "hash_algorithm": if crypto_provider.fips_enabled { "SHA-512" } else { "Blake3" }
+        }),
         created_at: Utc::now(),
         sbom: None,
     };
@@ -580,11 +583,11 @@ fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> any
     Ok(())
 }
 
-fn analyze_small_file(file_name: &str, contents: &[u8]) -> anyhow::Result<BinaryAnalysis> {
+fn analyze_small_file(file_name: &str, contents: &[u8], crypto_provider: &CryptoProvider) -> anyhow::Result<BinaryAnalysis> {
     tracing::info!("Analyzing small file '{}' ({} bytes)", file_name, contents.len());
     
     let sha256_hash = Sha256::digest(contents);
-    let blake3_hash = blake3::hash(contents);
+    let alternative_hash = crypto_provider.hash_alternative(contents)?;
     
     // For small files, just extract strings and basic info
     let strings = extract_strings(contents);
@@ -641,7 +644,7 @@ fn analyze_small_file(file_name: &str, contents: &[u8]) -> anyhow::Result<Binary
         imports: Vec::new(),
         exports: Vec::new(),
         hash_sha256: format!("{:x}", sha256_hash),
-        hash_blake3: Some(blake3_hash.to_hex().to_string()),
+        hash_blake3: Some(hex::encode(&alternative_hash)),
         size_bytes: contents.len() as u64,
         linked_libraries: Vec::new(),
         static_linked: false,
@@ -732,7 +735,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_empty() {
-        let result = analyze_binary("test.bin", &[]).await;
+        let crypto_provider = CryptoProvider::new(false, false);
+        let result = analyze_binary("test.bin", &[], &crypto_provider).await;
         assert!(result.is_ok());
         let analysis = result.unwrap();
         assert_eq!(analysis.file_name, "test.bin");

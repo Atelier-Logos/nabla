@@ -12,7 +12,7 @@ use hex;
 use crate::{AppState, binary::analyze_binary};
 
 pub async fn attest_binary(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     // Extract binary file from multipart
@@ -41,7 +41,8 @@ pub async fn attest_binary(
     // Run your internal analysis logic
     let analysis_struct = match analyze_binary(
         file_name.as_deref().unwrap_or("uploaded-binary"),
-        &file_bytes
+        &file_bytes,
+        &state.crypto_provider
     ).await {
         Ok(data) => data,
         Err(err) => {
