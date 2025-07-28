@@ -1,7 +1,9 @@
 ![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
 
-[![codecov](https://codecov.io/github/Atelier-Logos/nabla/branch/main/graph/badge.svg?token=A25NWBGGB9)](https://codecov.io/github/Atelier-Logos/nabla)
-[![CI](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml)
+[![CodeQL Advanced](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml)
+[!Build](https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml/badge.svg)(https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml)
+[![Scorecard supply-chain security](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml)
+[![Cargo Version](https://img.shields.io/crates/v/nabla)](https://crates.io/crates/nabla)
 [![License: FSL](https://img.shields.io/badge/license-FSL-lightgrey)](LICENSE)
 
 
@@ -283,8 +285,7 @@ curl -X POST http://localhost:8080/binary/chat \
       "top_p": 0.9,
       "model": "moonshotai/Kimi-K2-Instruct",
       "stop_sequences": []
-    }
-  }'
+    }'
 ```
 
 **Response Format:**
@@ -509,4 +510,4 @@ docker run -p 8080:8080 -e nabla
 
 This project is licensed under the Functional Source License - see the LICENSE file for details.
 
-## Want a license key? Chat up the Atelier Logos team and get a 14-day trial
+Want a license key? Chat up the Atelier Logos team and get a 14-day trial
