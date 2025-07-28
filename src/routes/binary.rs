@@ -331,8 +331,68 @@ pub async fn chat_with_binary(
     State(_state): State<AppState>,
     Json(request): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Read file from path
-    let file_content = tokio::fs::read(&request.file_path).await.map_err(|e| {
+    // Validate and sanitize the file path
+    let path = std::path::Path::new(&request.file_path);
+    
+    // 1. Check for path traversal attempts
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_path".to_string(),
+                message: "Path traversal not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 2. Check for absolute paths
+    if path.is_absolute() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_path".to_string(),
+                message: "Absolute paths not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 3. Get current working directory
+    let current_dir = std::env::current_dir().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "server_error".to_string(),
+                message: format!("Failed to get current directory: {}", e),
+            }),
+        )
+    })?;
+    
+    // 4. Build the full path
+    let full_path = current_dir.join(path);
+    
+    // 5. Check if file exists and is readable
+    if !full_path.exists() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_not_found".to_string(),
+                message: format!("File not found: {} (full path: {})", request.file_path, full_path.display()),
+            }),
+        ));
+    }
+    
+    if !full_path.is_file() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "not_a_file".to_string(),
+                message: format!("Path is not a file: {}", request.file_path),
+            }),
+        ));
+    }
+    
+    // 6. Read the file
+    let file_content = tokio::fs::read(&full_path).await.map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -342,7 +402,8 @@ pub async fn chat_with_binary(
         )
     })?;
     
-    let file_name = std::path::Path::new(&request.file_path)
+    // 7. Extract filename safely
+    let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
