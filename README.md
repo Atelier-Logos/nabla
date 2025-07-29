@@ -1,13 +1,12 @@
 ![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
 
-[![CodeQL Advanced](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml)
-[!Build](https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml/badge.svg)(https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml)
-[![Scorecard supply-chain security](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml)
-[![Cargo Version](https://img.shields.io/crates/v/nabla)](https://crates.io/crates/nabla)
-[![License: FSL](https://img.shields.io/badge/license-FSL-lightgrey)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank">
+    <img src="https://app.aikido.dev/assets/badges/full-light-theme.svg" alt="Aikido Security Audit Report" height="40" />    
+</a>
 
 
-# Nabla - A fair-source SAST/SCA API for calculating your SSCS gradients
+# Nabla - An OSS SAST/SCA API for calculating your SSCS gradients
 
 ![terminal demo](demo.gif)
 
