@@ -5,40 +5,40 @@ use nabla::enterprise::crypto::CryptoProvider;
 
 #[test]
 fn test_fips_crypto_provider_creation() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     assert!(provider.fips_enabled);
     assert!(provider.validation_enabled);
     
-    let provider = CryptoProvider::new(false, false);
+    let provider = CryptoProvider::new(false, false).unwrap();
     assert!(!provider.fips_enabled);
     assert!(!provider.validation_enabled);
 }
 
 #[test]
 fn test_fips_compliance_validation() {
-    let mut provider = CryptoProvider::new(true, true);
+    let mut provider = CryptoProvider::new(true, true).unwrap();
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
     
-    let mut provider = CryptoProvider::new(false, true);
+    let mut provider = CryptoProvider::new(false, true).unwrap();
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_fips_tls_compliance_validation() {
-    let mut provider = CryptoProvider::new(true, true);
+    let mut provider = CryptoProvider::new(true, true).unwrap();
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
     
-    let mut provider = CryptoProvider::new(false, true);
+    let mut provider = CryptoProvider::new(false, true).unwrap();
     let result = provider.validate_fips_compliance();
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_fips_client_config_creation() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     let result = provider.get_fips_client_config();
     assert!(result.is_ok());
     
@@ -48,7 +48,7 @@ fn test_fips_client_config_creation() {
 
 #[test]
 fn test_fips_server_config_creation() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     let result = provider.get_fips_client_config();
     // This should succeed as the client config doesn't require certificates
     assert!(result.is_ok());
@@ -56,7 +56,7 @@ fn test_fips_server_config_creation() {
 
 #[test]
 fn test_fips_client_config_without_fips_mode() {
-    let provider = CryptoProvider::new(false, false);
+    let provider = CryptoProvider::new(false, false).unwrap();
     let result = provider.get_fips_client_config();
     // The implementation may check FIPS mode, so we'll accept either success or failure
     // but we'll check that it returns a Result
@@ -68,7 +68,7 @@ fn test_fips_client_config_without_fips_mode() {
 
 #[test]
 fn test_fips_server_config_without_fips_mode() {
-    let provider = CryptoProvider::new(false, false);
+    let provider = CryptoProvider::new(false, false).unwrap();
     let result = provider.get_fips_client_config();
     // The implementation may check FIPS mode, so we'll accept either success or failure
     // but we'll check that it returns a Result
@@ -80,7 +80,7 @@ fn test_fips_server_config_without_fips_mode() {
 
 #[test]
 fn test_hash_functions_in_fips_mode() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     let data = b"test data";
     
     let sha256_result = provider.hash_sha256(data);
@@ -98,7 +98,7 @@ fn test_hash_functions_in_fips_mode() {
 
 #[test]
 fn test_hash_functions_in_standard_mode() {
-    let provider = CryptoProvider::new(false, false);
+    let provider = CryptoProvider::new(false, false).unwrap();
     let data = b"test data";
     
     let sha256_result = provider.hash_sha256(data);
@@ -117,7 +117,7 @@ fn test_hash_functions_in_standard_mode() {
 
 #[test]
 fn test_random_generation_in_fips_mode() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     let result = provider.generate_random(32);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 32);
@@ -125,7 +125,7 @@ fn test_random_generation_in_fips_mode() {
 
 #[test]
 fn test_random_generation_in_standard_mode() {
-    let provider = CryptoProvider::new(false, false);
+    let provider = CryptoProvider::new(false, false).unwrap();
     let result = provider.generate_random(32);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 32);
@@ -133,7 +133,7 @@ fn test_random_generation_in_standard_mode() {
 
 #[test]
 fn test_crypto_provider_clone() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     let cloned = provider.clone();
     
     assert_eq!(provider.fips_enabled, cloned.fips_enabled);
@@ -142,7 +142,7 @@ fn test_crypto_provider_clone() {
 
 #[test]
 fn test_fips_client_config_with_custom_roots() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     
     let result = provider.get_fips_client_config();
     // This should succeed as it uses webpki_roots
@@ -151,7 +151,7 @@ fn test_fips_client_config_with_custom_roots() {
 
 #[test]
 fn test_fips_server_config_with_custom_certs() {
-    let provider = CryptoProvider::new(true, true);
+    let provider = CryptoProvider::new(true, true).unwrap();
     
     let result = provider.get_fips_server_config(&std::path::Path::new("dummy"), &std::path::Path::new("dummy"));
     // This should fail because the dummy files don't exist

@@ -2,7 +2,7 @@ use nabla::enterprise::crypto::CryptoProvider;
 
 #[test]
 fn test_fips_initialization() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     let result = crypto_provider.initialize();
     assert!(result.is_ok());
     
@@ -13,14 +13,14 @@ fn test_fips_initialization() {
 
 #[test]
 fn test_fips_validation() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     let result = crypto_provider.validate_fips_compliance();
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_fips_status() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     let status = crypto_provider.get_fips_status();
     
     assert!(status.fips_enabled);
@@ -36,7 +36,7 @@ fn test_fips_status() {
 
 #[test]
 fn test_fips_hash_functions() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     let test_data = b"test data";
     
     // Test SHA-256
@@ -54,7 +54,7 @@ fn test_fips_hash_functions() {
 
 #[test]
 fn test_fips_random_generation() {
-    let mut crypto_provider = CryptoProvider::new(false, false);
+    let mut crypto_provider = CryptoProvider::new(false, false).unwrap();
     let result = crypto_provider.generate_random(32);
     assert!(result.is_ok());
     let random_data = result.unwrap();
@@ -63,12 +63,12 @@ fn test_fips_random_generation() {
 
 #[test]
 fn test_fips_key_derivation() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     let password = b"test_password";
-    let salt = b"test_salt";
+    let salt = b"test_salt_1234567890"; // At least 16 bytes for FIPS
     
     // Test PBKDF2
-    let pbkdf2_result = crypto_provider.derive_key_pbkdf2(password, salt, 1000, 32);
+    let pbkdf2_result = crypto_provider.derive_key_pbkdf2(password, salt, 10000, 32); // FIPS requires minimum 10,000 iterations
     assert!(pbkdf2_result.is_ok());
     let pbkdf2_key = pbkdf2_result.unwrap();
     assert_eq!(pbkdf2_key.len(), 32);
@@ -84,7 +84,7 @@ fn test_fips_key_derivation() {
 
 #[test]
 fn test_fips_validation_failure() {
-    let mut crypto_provider = CryptoProvider::new(true, true);
+    let mut crypto_provider = CryptoProvider::new(true, true).unwrap();
     
     // This should succeed even without initialization
     let result = crypto_provider.validate_fips_compliance();
@@ -93,7 +93,7 @@ fn test_fips_validation_failure() {
 
 #[test]
 fn test_fips_alternative_hash() {
-    let crypto_provider = CryptoProvider::new(true, true);
+    let crypto_provider = CryptoProvider::new(true, true).unwrap();
     let test_data = b"test data";
     
     let result = crypto_provider.hash_alternative(test_data);
