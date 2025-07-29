@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - feature/*
     tags:
       - 'v*.*.*'  # e.g., v1.2.3
 

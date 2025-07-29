@@ -4,6 +4,7 @@
       branches:
         - main
         - dev
+        - feature/*
   permissions:
     contents: read
 
