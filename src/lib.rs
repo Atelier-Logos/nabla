@@ -4,6 +4,7 @@ pub mod config;
 pub mod routes;
 pub mod middleware;
 pub mod binary;
+pub mod ssrf_protection; // Add SSRF protection module
 // pub mod providers; // Using enterprise providers instead
 pub mod enterprise;
 pub mod cli;

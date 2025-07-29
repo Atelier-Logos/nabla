@@ -72,9 +72,9 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Standard mode enabled - using performance-optimized algorithms");
     }
     
-    // Initialize license client
+    // Initialize license client with SSRF protection
     let client = if config.fips_mode {
-        // Use FIPS-compliant HTTP client
+        // Use FIPS-compliant HTTP client with redirects disabled
         let tls_config = crypto_provider.get_fips_client_config()?;
         let _https = hyper_rustls::HttpsConnectorBuilder::new()
             .with_tls_config(tls_config)
@@ -84,10 +84,13 @@ async fn main() -> anyhow::Result<()> {
         
         reqwest::Client::builder()
             .use_rustls_tls()
+            .redirect(reqwest::redirect::Policy::none()) // Disable redirects for SSRF protection
             .build()?
     } else {
-        // Use standard HTTP client
-        reqwest::Client::new()
+        // Use standard HTTP client with redirects disabled
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none()) // Disable redirects for SSRF protection
+            .build()?
     };
 
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
