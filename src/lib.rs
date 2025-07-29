@@ -4,7 +4,7 @@ pub mod config;
 pub mod routes;
 pub mod middleware;
 pub mod binary;
-pub mod providers;
+// pub mod providers; // Using enterprise providers instead
 pub mod enterprise;
 pub mod cli;
 

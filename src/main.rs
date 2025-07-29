@@ -15,10 +15,10 @@ mod config;
 mod routes;
 mod middleware;
 mod binary;
-mod providers;
+// mod providers; // Using enterprise providers instead
 mod enterprise;
 
-use providers::InferenceManager;
+use enterprise::providers::InferenceManager;
 
 use config::Config;
 use middleware::validate_license_jwt;
