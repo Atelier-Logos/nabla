@@ -54,10 +54,12 @@ impl NablaCli {
         file_content: &[u8],
         file_name: &str,
     ) -> Result<String> {
-        // This is a mock implementation
-        // In real implementation, use reqwest to send multipart form data
+        // Validate URL for SSRF protection
+        let ssrf_validator = crate::ssrf_protection::SSRFValidator::new();
+        let validated_url = ssrf_validator.validate_url(url)
+            .map_err(|e| anyhow!("SSRF protection violation: {}", e))?;
         
-        println!("📤 Sending {} bytes to {}", file_content.len(), url);
+        println!("📤 Sending {} bytes to {}", file_content.len(), validated_url);
         
         match token {
             Some(t) => println!("🔐 Using authentication token: {}...", &t[..10.min(t.len())]),
@@ -120,14 +122,22 @@ impl NablaCli {
         file_content: &[u8],
         file_name: &str,
     ) -> Result<String> {
-        let client = Client::new();
+        // Validate URL for SSRF protection
+        let ssrf_validator = crate::ssrf_protection::SSRFValidator::new();
+        let validated_url = ssrf_validator.validate_url(url)
+            .map_err(|e| anyhow!("SSRF protection violation: {}", e))?;
+        
+        // Create HTTP client with redirects disabled
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none()) // Disable redirects
+            .build()?;
         
         let form = reqwest::multipart::Form::new()
             .part("file", reqwest::multipart::Part::bytes(file_content.to_vec())
                 .file_name(file_name.to_string()));
 
         let mut request = client
-            .post(url)
+            .post(validated_url.as_str())
             .multipart(form);
 
         // Add auth header if token is provided

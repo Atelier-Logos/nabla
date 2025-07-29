@@ -544,7 +544,29 @@ pub async fn chat_with_binary(
             let inference_url = request.inference_url
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
             
-            let provider = HTTPProvider::new(inference_url, None, request.provider_token);
+            // Validate the inference URL for SSRF protection
+            let ssrf_validator = crate::ssrf_protection::SSRFValidator::new();
+            let validated_url = ssrf_validator.validate_url(&inference_url)
+                .map_err(|e| (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "ssrf_protection_violation".to_string(),
+                        message: format!("SSRF protection violation: {}", e),
+                    }),
+                ))?;
+            
+            let provider = HTTPProvider::with_ssrf_config(
+                validated_url.to_string(), 
+                None, 
+                request.provider_token,
+                ssrf_validator,
+            ).map_err(|e| (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "provider_creation_error".to_string(),
+                    message: format!("Failed to create HTTP provider: {}", e),
+                }),
+            ))?;
             
             let mut options = request.options.unwrap_or_default();
             options.model_path = request.model_path;
