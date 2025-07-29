@@ -22,7 +22,7 @@ COPY tests/ ./tests/
 RUN rm -rf src/enterprise
 
 # Clone the enterprise repository directly
-RUN git clone https://github.com/nabla-ai/enterprise.git src/enterprise && \
+RUN git clone https://github.com/Atelier-Logos/nabla-enterprise.git src/enterprise && \
     cd src/enterprise && \
     git checkout 2158ca657115b890fa1bcd3407a5bdf566e33b30
 
