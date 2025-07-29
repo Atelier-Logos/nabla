@@ -22,10 +22,8 @@ use crate::{AppState, binary::{
 /// Validates and sanitizes a file path to prevent path traversal attacks
 /// Returns the canonicalized path if valid, or an error if the path is unsafe
 fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
-    let path = std::path::Path::new(file_path);
-    
-    // 1. Check for path traversal attempts (..)
-    if path.components().any(|c| c == std::path::Component::ParentDir) {
+    // 1. Check for path traversal attempts (..) using string operations
+    if file_path.contains("..") {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -35,8 +33,8 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         ));
     }
     
-    // 2. Check for absolute paths
-    if path.is_absolute() {
+    // 2. Check for absolute paths using string operations
+    if file_path.starts_with('/') || (cfg!(windows) && file_path.contains(':')) {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -46,7 +44,10 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         ));
     }
     
-    // 3. Define allowed directory (restrict to current working directory)
+    // 3. Create path only after validation
+    let path = std::path::Path::new(file_path);
+    
+    // 4. Define allowed directory (restrict to current working directory)
     let base_dir = std::env::current_dir().map_err(|_e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -57,7 +58,7 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         )
     })?;
     
-    // 4. Build the full path and canonicalize it
+    // 5. Build the full path and canonicalize it
     let full_path = base_dir.join(path);
     let canonical_path = full_path.canonicalize().map_err(|_e| {
         (
@@ -69,7 +70,7 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         )
     })?;
     
-    // 5. Security check: Ensure the canonicalized path is within the allowed directory
+    // 6. Security check: Ensure the canonicalized path is within the allowed directory
     if !canonical_path.starts_with(&base_dir) {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -80,7 +81,7 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         ));
     }
     
-    // 6. Check if file exists and is a regular file (not a symlink or directory)
+    // 7. Check if file exists and is a regular file (not a symlink or directory)
     if !canonical_path.exists() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -91,7 +92,7 @@ fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode
         ));
     }
     
-    // 7. Check if it's a regular file (not a symlink, directory, etc.)
+    // 8. Check if it's a regular file (not a symlink, directory, etc.)
     let metadata = std::fs::metadata(&canonical_path).map_err(|_e| {
         (
             StatusCode::BAD_REQUEST,
