@@ -19,6 +19,102 @@ use crate::{AppState, binary::{
     scan_binary_vulnerabilities, VulnerabilityMatch, 
 }};
 
+/// Validates and sanitizes a file path to prevent path traversal attacks
+/// Returns the canonicalized path if valid, or an error if the path is unsafe
+fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
+    let path = std::path::Path::new(file_path);
+    
+    // 1. Check for path traversal attempts (..)
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Path traversal not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 2. Check for absolute paths
+    if path.is_absolute() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Absolute paths not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 3. Define allowed directory (restrict to current working directory)
+    let base_dir = std::env::current_dir().map_err(|_e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "server_error".to_string(),
+                message: "Failed to get current directory".to_string(),
+            }),
+        )
+    })?;
+    
+    // 4. Build the full path and canonicalize it
+    let full_path = base_dir.join(path);
+    let canonical_path = full_path.canonicalize().map_err(|_e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Invalid file path".to_string(),
+            }),
+        )
+    })?;
+    
+    // 5. Security check: Ensure the canonicalized path is within the allowed directory
+    if !canonical_path.starts_with(&base_dir) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Access denied: Path outside allowed directory".to_string(),
+            }),
+        ));
+    }
+    
+    // 6. Check if file exists and is a regular file (not a symlink or directory)
+    if !canonical_path.exists() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_not_found".to_string(),
+                message: "File not found".to_string(),
+            }),
+        ));
+    }
+    
+    // 7. Check if it's a regular file (not a symlink, directory, etc.)
+    let metadata = std::fs::metadata(&canonical_path).map_err(|_e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_error".to_string(),
+                message: "Cannot access file".to_string(),
+            }),
+        )
+    })?;
+    
+    if !metadata.is_file() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Path is not a regular file".to_string(),
+            }),
+        ));
+    }
+    
+    Ok(canonical_path)
+}
+
 #[derive(Debug, Serialize)]
 pub struct BinaryUploadResponse {
     pub id: Uuid,
@@ -365,78 +461,22 @@ pub async fn chat_with_binary(
     State(state): State<AppState>,
     Json(request): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Validate and sanitize the file path
-        let path = std::path::Path::new(&request.file_path);
+    // Validate and sanitize the file path using the helper function
+    let canonical_path = validate_file_path(&request.file_path)?;
     
-    // 1. Check for path traversal attempts
-        if path.components().any(|c| c == std::path::Component::ParentDir) {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                error: "invalid_path".to_string(),
-                message: "Path traversal not allowed".to_string(),
-            }),
-        ));
-    }
-    
-    // 2. Check for absolute paths
-    if path.is_absolute() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "invalid_path".to_string(),
-                message: "Absolute paths not allowed".to_string(),
-            }),
-        ));
-    }
-    
-    // 3. Get current working directory
-    let current_dir = std::env::current_dir().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "server_error".to_string(),
-                message: format!("Failed to get current directory: {}", e),
-            }),
-        )
-    })?;
-    
-    // 4. Build the full path
-    let full_path = current_dir.join(path);
-    
-    // 5. Check if file exists and is readable
-    if !full_path.exists() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "file_not_found".to_string(),
-                message: format!("File not found: {} (full path: {})", request.file_path, full_path.display()),
-            }),
-        ));
-    }
-    
-    if !full_path.is_file() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "not_a_file".to_string(),
-                message: format!("Path is not a file: {}", request.file_path),
-                }),
-            ));
-        }
-    
-    // 6. Read the file
-    let file_content = tokio::fs::read(&full_path).await.map_err(|e| {
+    // Read the file using the validated canonicalized path
+    let file_content = tokio::fs::read(&canonical_path).await.map_err(|_e| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: "file_read_error".to_string(),
-                message: format!("Failed to read file '{}': {}", request.file_path, e),
+                message: "Failed to read file".to_string(),
             }),
         )
     })?;
     
-    // 7. Extract filename safely
+    // Extract filename safely from the original path
+    let path = std::path::Path::new(&request.file_path);
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
