@@ -9,7 +9,11 @@ ENV LICENSE_SIGNING_KEY=$LICENSE_SIGNING_KEY
 ENV FIPS_MODE=$FIPS_MODE
 ENV FIPS_VALIDATION=$FIPS_VALIDATION
 
+# Install git to handle submodules
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 COPY . .
+RUN git submodule update --init --recursive
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN cargo build --release
 
