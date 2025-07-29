@@ -1,4 +1,3 @@
-# Use a more specific base image for better caching
 FROM rust:1.88-slim@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS builder
 WORKDIR /app
 
@@ -10,44 +9,39 @@ ENV LICENSE_SIGNING_KEY=$LICENSE_SIGNING_KEY
 ENV FIPS_MODE=$FIPS_MODE
 ENV FIPS_VALIDATION=$FIPS_VALIDATION
 
-# Install system dependencies first (this layer will be cached)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    pkg-config \
-    libssl-dev \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Install git and other dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends git pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Copy git files first for submodule initialization
-COPY .git .git
-COPY .gitmodules .gitmodules
+# Copy the main project files (excluding the enterprise submodule)
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+COPY public/ ./public/
+COPY tests/ ./tests/
 
-# Initialize submodules
-RUN git submodule update --init --recursive --force
+# Remove the enterprise submodule directory if it exists
+RUN rm -rf src/enterprise
 
-# Copy the rest of the project
-COPY . .
+# Clone the enterprise repository directly
+RUN git clone https://github.com/nabla-ai/enterprise.git src/enterprise && \
+    cd src/enterprise && \
+    git checkout 2158ca657115b890fa1bcd3407a5bdf566e33b30
 
-# Build the application
-RUN cargo build --release --bin nabla
+# Build the project
+RUN cargo build --release
 
-# Runtime stage
 FROM rust:1.88-slim@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS runtime
+WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libacl1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Install cargo-audit in a separate layer for better caching
-RUN cargo install --locked cargo-audit --version 0.21.2
+# Copy the built binaries
+COPY --from=builder /app/target/release/nabla /usr/local/bin/
+COPY --from=builder /app/target/release/test-middleware /usr/local/bin/
+COPY --from=builder /app/target/release/test-deployment-modes /usr/local/bin/
 
-# Copy the binary
-COPY --from=builder /app/target/release/nabla /usr/local/bin/nabla
+# Copy public assets
+COPY --from=builder /app/public /app/public
 
-# Set FIPS environment variables
-ENV FIPS_MODE=false
-ENV FIPS_VALIDATION=false
-
-ENTRYPOINT ["nabla"]
+# Set the default command
+CMD ["nabla"]
