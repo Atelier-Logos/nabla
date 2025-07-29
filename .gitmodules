@@ -1,0 +1,3 @@
+[submodule "src/enterprise"]
+	path = src/enterprise
+	url = https://github.com/Atelier-Logos/nabla-enterprise.git
