@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod binary;
 pub mod providers;
 pub mod enterprise;
+pub mod cli;
 
 // Re-export AppState so integration tests can build routers easily.
 pub use config::Config;
