@@ -1,3 +1,4 @@
+# Use a more specific base image for better caching
 FROM rust:1.88-slim@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS builder
 WORKDIR /app
 
@@ -9,7 +10,7 @@ ENV LICENSE_SIGNING_KEY=$LICENSE_SIGNING_KEY
 ENV FIPS_MODE=$FIPS_MODE
 ENV FIPS_VALIDATION=$FIPS_VALIDATION
 
-# Install git and build dependencies
+# Install system dependencies first (this layer will be cached)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     pkg-config \
@@ -19,29 +20,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy dependency files first for better caching
 COPY Cargo.toml Cargo.lock ./
-COPY .gitmodules ./
+COPY src/lib.rs src/lib.rs
+COPY src/main.rs src/main.rs
+COPY src/config.rs src/config.rs
+COPY src/middleware.rs src/middleware.rs
+COPY src/binary/mod.rs src/binary/mod.rs
+COPY src/routes/mod.rs src/routes/mod.rs
+COPY src/cli/mod.rs src/cli/mod.rs
+COPY src/enterprise/mod.rs src/enterprise/mod.rs
 
-# Create a dummy main.rs to build dependencies
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+# Create dummy files for modules that don't exist yet (for dependency resolution)
+RUN mkdir -p src/binary src/routes src/cli src/enterprise/providers
+RUN touch src/binary/dummy.rs src/routes/dummy.rs src/cli/dummy.rs src/enterprise/providers/dummy.rs
 
-# Build dependencies only (this layer will be cached)
+# Build dependencies only (this layer will be cached if dependencies don't change)
 RUN cargo build --release --bin nabla
 
 # Now copy the actual source code
 COPY . .
 
-# Ensure submodules are properly initialized and updated
+# Initialize submodules
 RUN git submodule update --init --recursive --force
 
-# Verify submodule is properly initialized
-RUN ls -la src/enterprise/ && test -f src/enterprise/mod.rs
-
-# Build the actual application (this will be much faster now)
+# Build the actual application (this layer will be cached if source doesn't change)
 RUN cargo build --release --bin nabla
 
+# Runtime stage
 FROM rust:1.88-slim@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libacl1 && rm -rf /var/lib/apt/lists/*
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libacl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-audit in a separate layer for better caching
 RUN cargo install --locked cargo-audit --version 0.21.2
+
+# Copy the binary
 COPY --from=builder /app/target/release/nabla /usr/local/bin/nabla
 
 # Set FIPS environment variables

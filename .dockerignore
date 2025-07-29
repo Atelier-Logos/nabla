@@ -1,15 +1,17 @@
 # Git
 .git
 .gitignore
+.gitmodules
 
 # Documentation
 README.md
 LICENSE
 CODE_OF_CONDUCT.md
+*.md
 
 # Build artifacts
 target/
-**/*.rs.bk
+**/target/
 
 # IDE files
 .vscode/
@@ -26,22 +28,23 @@ Thumbs.db
 
 # Test files
 tests/
-**/*_test.rs
-**/*_tests.rs
+**/tests/
 
-# Documentation
-docs/
-*.md
+# Demo files
+demo.gif
+demo_script.sh
 
-# Docker
-Dockerfile*
-.dockerignore
+# Public assets (if not needed in container)
+public/
 
-# CI/CD
-.github/
-.gitlab-ci.yml
-.travis.yml
+# Environment files
+.env
+.env.local
 
 # Temporary files
 *.tmp
 *.temp
+
+# Docker files (except Dockerfile)
+docker-compose*.yml
+.dockerignore
