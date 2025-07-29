@@ -475,9 +475,8 @@ pub async fn chat_with_binary(
         )
     })?;
     
-    // Extract filename safely from the original path
-    let path = std::path::Path::new(&request.file_path);
-    let file_name = path
+    // Extract filename safely from the validated canonical path
+    let file_name = canonical_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
