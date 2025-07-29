@@ -21,7 +21,7 @@ use crate::{AppState, binary::{
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
 /// Returns the canonicalized path if valid, or an error if the path is unsafe
-fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
+pub fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
     // 1. Check for path traversal attempts (..) using string operations
     if file_path.contains("..") {
         return Err((
