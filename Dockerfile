@@ -18,31 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files first for better caching
-COPY Cargo.toml Cargo.lock ./
-COPY src/lib.rs src/lib.rs
-COPY src/main.rs src/main.rs
-COPY src/config.rs src/config.rs
-COPY src/middleware.rs src/middleware.rs
-COPY src/binary/mod.rs src/binary/mod.rs
-COPY src/routes/mod.rs src/routes/mod.rs
-COPY src/cli/mod.rs src/cli/mod.rs
-COPY src/enterprise/mod.rs src/enterprise/mod.rs
-
-# Create dummy files for modules that don't exist yet (for dependency resolution)
-RUN mkdir -p src/binary src/routes src/cli src/enterprise/providers
-RUN touch src/binary/dummy.rs src/routes/dummy.rs src/cli/dummy.rs src/enterprise/providers/dummy.rs
-
-# Build dependencies only (this layer will be cached if dependencies don't change)
-RUN cargo build --release --bin nabla
-
-# Now copy the actual source code
+# Copy the entire project first for dependency resolution
 COPY . .
 
 # Initialize submodules
 RUN git submodule update --init --recursive --force
 
-# Build the actual application (this layer will be cached if source doesn't change)
+# Build the application
 RUN cargo build --release --bin nabla
 
 # Runtime stage
