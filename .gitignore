@@ -18,7 +18,6 @@ models/
 Cargo.lock
 .env
 .DS_Store
-**/bin/*
 demo_script.sh
 demo_request.json
 chat_request.json
