@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - dev
     tags:
       - 'v*.*.*'  # e.g., v1.2.3
 
