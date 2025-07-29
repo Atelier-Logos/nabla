@@ -18,11 +18,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the entire project first for dependency resolution
-COPY . .
+# Copy git files first for submodule initialization
+COPY .git .git
+COPY .gitmodules .gitmodules
 
 # Initialize submodules
 RUN git submodule update --init --recursive --force
+
+# Copy the rest of the project
+COPY . .
 
 # Build the application
 RUN cargo build --release --bin nabla
