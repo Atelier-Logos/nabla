@@ -16,26 +16,59 @@ use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,
-    pub exp: i64,
-    pub iat: i64,
-    pub jti: String,
-    pub plan: String,
-    pub rate_limit: i32,
-    pub deployment_id: String,
+    pub sub: String,        // Company name (e.g., "acme-corp")
+    pub uid: String,        // User ID within the company
+    pub exp: i64,           // Expiration timestamp
+    pub iat: i64,           // Issued at timestamp
+    pub jti: String,        // JWT ID
+    pub rate_limit: i32,    // Requests per hour
+    pub deployment_id: String, // UUID for deployment isolation
+    pub features: PlanFeatures, // Feature flags - required field
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlanFeatures {
+    pub chat_enabled: bool,
+    pub api_access: bool,
+    pub file_upload_limit_mb: u32,
+    pub concurrent_requests: u32,
+    pub custom_models: bool,
+    pub sbom_generation: bool,
+    pub vulnerability_scanning: bool,
+    pub binary_attestation: bool,
+    pub monthly_binaries: u32,
+}
+
 
 // In-memory rate limiting store
 static RATE_LIMITS: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(DashMap::new);
 
+impl PlanFeatures {
+    pub fn default_oss() -> Self {
+        Self {
+            chat_enabled: false,
+            api_access: true,
+            file_upload_limit_mb: 10,
+            concurrent_requests: 1,
+            custom_models: false,
+            sbom_generation: true,
+            vulnerability_scanning: true,
+            binary_attestation: false,
+            monthly_binaries: 100,
+        }
+    }
+}
+
 pub async fn validate_license_jwt(
     State(state): State<AppState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response, impl IntoResponse> {
-    // Check if FIPS mode is enabled - if not, skip authentication
+    // Check if FIPS mode is enabled
     if !state.config.fips_mode {
-        tracing::info!("FIPS mode disabled - skipping authentication");
+        tracing::info!("FIPS mode disabled - using default OSS features");
+        // Add default OSS features to request extensions for endpoints to use
+        request.extensions_mut().insert(PlanFeatures::default_oss());
         return Ok(next.run(request).await);
     }
 
@@ -109,6 +142,9 @@ pub async fn validate_license_jwt(
         ));
     }
 
-    // 4. Continue with the request
+    // 4. Add features to request extensions for endpoints to use
+    request.extensions_mut().insert(claims.features.clone());
+    
+    // 5. Continue with the request
     Ok(next.run(request).await)
 }

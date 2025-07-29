@@ -18,8 +18,10 @@ models/
 Cargo.lock
 .env
 .DS_Store
-**/bin/*
 demo_script.sh
+
+# Enterprise module (cloned during Docker build)
+src/enterprise/
 demo_request.json
 chat_request.json
 sbom.json

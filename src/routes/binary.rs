@@ -1,6 +1,6 @@
 // src/routes/binary.rs
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, State, Request},
     response::Json,
     http::StatusCode,
 };
@@ -10,14 +10,14 @@ use serde_json::{json, Value};
 use anyhow::{Result};
 
 // Add this line to import the inference module
-use crate::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse};
+use crate::enterprise::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse};
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
 use crate::{AppState, binary::{
     analyze_binary, BinaryAnalysis, 
     scan_binary_vulnerabilities, VulnerabilityMatch, 
-}};
+}, middleware::PlanFeatures};
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
 /// Returns the canonicalized path if valid, or an error if the path is unsafe
@@ -457,11 +457,50 @@ pub async fn diff_binaries(
     Ok(Json(meta.into()))
 }
 
-#[axum::debug_handler]
+#[axum::debug_handler]  
 pub async fn chat_with_binary(
     State(state): State<AppState>,
-    Json(request): Json<ChatRequest>,
+    req: Request,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Get features from request extensions first (set by middleware)
+    let features = req.extensions().get::<PlanFeatures>()
+        .cloned()
+        .unwrap_or_else(|| PlanFeatures::default_oss());
+
+    // Extract JSON body manually
+    let (_parts, body) = req.into_parts();
+    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(_) => return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_body".to_string(),
+                message: "Failed to read request body".to_string(),
+            }),
+        )),
+    };
+    
+    let request: ChatRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(req) => req,
+        Err(_) => return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_json".to_string(),
+                message: "Invalid JSON in request body".to_string(),
+            }),
+        )),
+    };
+    
+    // Chat is always a paid feature - check the feature flag
+    if !features.chat_enabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "chat_not_available".to_string(),
+                message: "Chat feature is not available with your current license. Please contact sales to upgrade your plan and unlock AI-powered binary analysis. Visit https://nabla.dev/pricing for more information.".to_string(),
+            }),
+        ));
+    }
     // Validate and sanitize the file path using the helper function
     let canonical_path = validate_file_path(&request.file_path)?;
     

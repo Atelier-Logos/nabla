@@ -1,6 +1,6 @@
 
 use nabla::binary::BinaryAnalysis;
-use nabla::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse, InferenceError};
+use nabla::enterprise::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse, InferenceError};
 use async_trait::async_trait;
 use serde_json::json;
 use uuid;
