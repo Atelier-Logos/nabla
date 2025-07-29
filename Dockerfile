@@ -13,7 +13,12 @@ ENV FIPS_VALIDATION=$FIPS_VALIDATION
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-RUN git submodule update --init --recursive
+# Ensure submodules are properly initialized and updated
+RUN git submodule update --init --recursive --force
+# Verify submodule is properly initialized
+RUN ls -la src/enterprise/ && test -f src/enterprise/mod.rs
+# Debug: Check submodule status and content
+RUN git submodule status && ls -la src/enterprise/providers/
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN cargo build --release
 
