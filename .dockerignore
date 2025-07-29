@@ -1,3 +1,47 @@
-fly.toml
-# Ignore build artifacts so the Docker build context stays small
-/target/
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+CODE_OF_CONDUCT.md
+
+# Build artifacts
+target/
+**/*.rs.bk
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test files
+tests/
+**/*_test.rs
+**/*_tests.rs
+
+# Documentation
+docs/
+*.md
+
+# Docker
+Dockerfile*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Temporary files
+*.tmp
+*.temp

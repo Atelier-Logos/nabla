@@ -48,4 +48,4 @@ COPY --from=builder /app/target/release/nabla /usr/local/bin/nabla
 ENV FIPS_MODE=false
 ENV FIPS_VALIDATION=false
 
-ENTRYPOINT ["nabla"]
+ENTRYPOINT ["nabla"] 
