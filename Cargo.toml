@@ -99,7 +99,7 @@ once_cell = "1.19"
 dashmap = "6.1" 
 
 # Additional dependencies for base64ct
-base64ct = "=1.7.3" 
+base64ct = "=1.8.0" 
 ran = "2.0.1"
 rand = "0.9"
 jsonwebtoken = "9"
