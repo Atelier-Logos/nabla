@@ -63,3 +63,6 @@
             # Push both tags
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            
+            # Note: FIPS mode is controlled via build args and can be overridden at runtime
+            # Example: docker run -e FIPS_MODE=false -e FIPS_VALIDATION=false $ECR_REGISTRY/$ECR_REPOSITORY:latest

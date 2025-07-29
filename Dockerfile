@@ -43,9 +43,5 @@ COPY --from=builder /app/target/release/test-deployment-modes /usr/local/bin/
 # Copy public assets
 COPY --from=builder /app/public /app/public
 
-# Set FIPS environment variables
-ENV FIPS_MODE=true
-ENV FIPS_VALIDATION=true
-
 # Set the default command
 CMD ["nabla"]
