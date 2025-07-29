@@ -476,7 +476,17 @@ pub async fn chat_with_binary(
     })?;
     
     // Extract filename safely from the original path
+    // Prevent path traversal attacks by rejecting paths containing '..'
     let path = std::path::Path::new(&request.file_path);
+    if path.components().any(|c| c == std::path::Component::ParentDir) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: format!("Invalid input: {}", path.display()),
+            }),
+        ));
+    }
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
