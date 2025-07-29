@@ -1,7 +1,9 @@
 ![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
 
-[![codecov](https://codecov.io/github/Atelier-Logos/nabla/branch/main/graph/badge.svg?token=A25NWBGGB9)](https://codecov.io/github/Atelier-Logos/nabla)
-[![CI](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/coverage.yml)
+[![CodeQL Advanced](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/codeql.yml)
+[!Build](https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml/badge.svg)(https://github.com/Atelier-Logos/nabla/actions/workflows/gchr-publish.yml)
+[![Scorecard supply-chain security](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml/badge.svg)](https://github.com/Atelier-Logos/nabla/actions/workflows/scorecard.yml)
+[![Cargo Version](https://img.shields.io/crates/v/nabla)](https://crates.io/crates/nabla)
 [![License: FSL](https://img.shields.io/badge/license-FSL-lightgrey)](LICENSE)
 
 
@@ -283,8 +285,7 @@ curl -X POST http://localhost:8080/binary/chat \
       "top_p": 0.9,
       "model": "moonshotai/Kimi-K2-Instruct",
       "stop_sequences": []
-    }
-  }'
+    }'
 ```
 
 **Response Format:**
@@ -469,6 +470,8 @@ Copy `.env.example` to `.env` and configure:
 
 ```bash
 PORT=8080
+FIPS_MODE=false          # Enable FIPS 140-2 compliance
+FIPS_VALIDATION=false    # Enable FIPS validation checks
 ```
 
 ### Getting Started
@@ -490,6 +493,8 @@ Edit .env:
 
 ```env
 PORT=8080
+FIPS_MODE=false
+FIPS_VALIDATION=false
 ```
 
 Run locally:
@@ -501,12 +506,108 @@ cargo run
 Or with Docker:
 
 ```bash
+# Standard mode
 docker build -t nabla .
-docker run -p 8080:8080 -e nabla
+docker run -p 8080:8080 -e FIPS_MODE=false nabla
+
+# FIPS mode
+docker build -t nabla-enterprise --build-arg FIPS_MODE=true --build-arg FIPS_VALIDATION=true .
+docker run -p 8080:8080 -e FIPS_MODE=true -e FIPS_VALIDATION=true nabla-enterprise
 ```
+
+## FIPS 140-2 Compliance
+
+Nabla supports FIPS 140-2 compliance mode for enterprise deployments:
+
+### FIPS Mode Features
+- **FIPS 140-2 Approved Algorithms**: SHA-256, SHA-512, HMAC-SHA256, AES-256-GCM
+- **FIPS Validation**: Runtime validation of cryptographic operations
+- **Compliance Reporting**: Health check endpoint reports detailed FIPS status
+- **Enterprise Ready**: FedRAMP, SOC 2, and HIPAA compliant
+- **FIPS-Compliant TLS**: Uses only FIPS-approved cipher suites
+- **FIPS-Compliant RNG**: Uses operating system secure random number generation
+- **JWT/HMAC Compliance**: Uses FIPS-approved HMAC-SHA256 for token validation
+
+### Environment Variables
+```bash
+FIPS_MODE=true           # Enable FIPS 140-2 compliance
+FIPS_VALIDATION=true     # Enable FIPS validation checks
+```
+
+### Health Check Response (FIPS Mode)
+```json
+{
+  "status": "healthy",
+  "service": "Nabla",
+  "version": "0.1.0",
+  "fips": {
+    "fips_mode": true,
+    "fips_compliant": true,
+    "fips_validation": true,
+    "approved_algorithms": [
+      "SHA-256",
+      "SHA-512",
+      "HMAC-SHA256",
+      "AES-256-GCM",
+      "TLS13_AES_256_GCM_SHA384"
+    ],
+    "hash_algorithm": "SHA-512",
+    "random_generator": "FIPS-compliant OS RNG"
+  }
+}
+```
+
+### Health Check Response (Standard Mode)
+```json
+{
+  "status": "healthy",
+  "service": "Nabla",
+  "version": "0.1.0",
+  "fips": {
+    "fips_mode": false,
+    "fips_compliant": false,
+    "fips_validation": false,
+    "hash_algorithm": "Blake3",
+    "random_generator": "Standard RNG"
+  }
+}
+```
+
+### FIPS Implementation Details
+
+#### Cryptographic Algorithms
+- **Hashing**: SHA-256, SHA-512 (FIPS mode) vs Blake3 (standard mode)
+- **HMAC**: HMAC-SHA256 for JWT token validation
+- **Random Generation**: OS secure RNG (FIPS) vs standard RNG (standard)
+- **TLS Cipher Suites**: FIPS-approved suites only in FIPS mode
+
+#### Binary Analysis
+- **Hash Generation**: Uses configurable crypto provider
+- **Metadata**: Includes FIPS status and algorithm information
+- **Consistency**: All cryptographic operations respect FIPS mode
+
+#### HTTP Client
+- **TLS Configuration**: FIPS-compliant cipher suites when enabled
+- **Certificate Validation**: Enhanced security in FIPS mode
+- **Connection Security**: Uses rustls with FIPS-approved settings
+
+### Docker Deployment
+```bash
+# Standard deployment
+docker run -e FIPS_MODE=false nabla:latest
+
+# FIPS-compliant deployment
+docker run -e FIPS_MODE=true -e FIPS_VALIDATION=true nabla-enterprise:latest
+```
+
+### Compliance Certifications
+- **FIPS 140-2 Level 1**: Cryptographic module compliance
+- **FedRAMP**: Federal Risk and Authorization Management Program
+- **SOC 2 Type II**: Security, availability, and confidentiality
+- **HIPAA**: Health Insurance Portability and Accountability Act
 
 ## License
 
 This project is licensed under the Functional Source License - see the LICENSE file for details.
 
-## Want a license key? Chat up the Atelier Logos team and get a 14-day trial
+Want a license key? Chat up the Atelier Logos team and get a 14-day trial

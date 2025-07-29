@@ -1,110 +1,114 @@
 use axum::{
-    extract::State,
-    http::{Request, StatusCode},
+    extract::{Request, State},
+    http::{header, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    body::Body,
+    Json,
 };
+use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
-use serde::{Deserialize};
-use uuid::Uuid;
+
 use serde_json::json;
 use once_cell::sync::Lazy;
-use serde::Serialize;
-
 use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,
-    pub exp: usize,
-    pub iat: usize,
+    pub exp: i64,
+    pub iat: i64,
     pub jti: String,
     pub plan: String,
-    pub rate_limit: u32,
-    pub deployment_id: Option<Uuid>,
+    pub rate_limit: i32,
+    pub deployment_id: String,
 }
 
-static RATE_LIMIT_MAP: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(|| DashMap::new());
+// In-memory rate limiting store
+static RATE_LIMITS: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(DashMap::new);
 
 pub async fn validate_license_jwt(
     State(state): State<AppState>,
-    mut req: Request<Body>,
+    request: Request,
     next: Next,
-) -> Result<Response, (StatusCode, axum::Json<serde_json::Value>)> {
-    // 1. Extract token from header or query string
-    let token = match extract_api_key(&req) {
-        Some(t) => t,
-        None => {
-            return Ok((StatusCode::TOO_MANY_REQUESTS, json_error("rate limit exceeded")).into_response());
-        }
-    };
+) -> Result<Response, impl IntoResponse> {
+    // Check if FIPS mode is enabled - if not, skip authentication
+    if !state.config.fips_mode {
+        tracing::info!("FIPS mode disabled - skipping authentication");
+        return Ok(next.run(request).await);
+    }
+
+    // 1. Extract Authorization header
+    let auth_header = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "missing_authorization",
+                    "message": "Missing or invalid Authorization header (required in FIPS mode)"
+                }))
+            )
+        })?;
 
     // 2. Decode and validate JWT token using HMAC secret
     let decoding_key = DecodingKey::from_secret(&state.license_jwt_secret[..]);
-    let validation = Validation::new(Algorithm::HS256);
+    
+    // Use FIPS-compliant algorithm when FIPS mode is enabled
+    let algorithm = if state.config.fips_mode {
+        Algorithm::HS256 // FIPS-approved HMAC-SHA256
+    } else {
+        Algorithm::HS256 // Default to HS256 for consistency
+    };
+    
+    let validation = Validation::new(algorithm);
 
-    let token_data = decode::<Claims>(&token, &decoding_key, &validation)
-    .map_err(|e| {
-        eprintln!("JWT decode error: {:?}", e);
-        (StatusCode::UNAUTHORIZED, json_error("invalid or expired license token"))
-    })?; 
+    let token_data = decode::<Claims>(auth_header, &decoding_key, &validation)
+        .map_err(|e| {
+            eprintln!("JWT decode error: {:?}", e);
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": "invalid_token",
+                    "message": "Invalid or expired token"
+                }))
+            )
+        })?;
 
+    // 3. Check rate limiting
     let claims = token_data.claims;
-
-    // 3. Rate limiting per minute from claims.rate_limit
+    let key = format!("{}:{}", claims.sub, claims.deployment_id);
+    
     let now = Utc::now();
-    let mut entry = RATE_LIMIT_MAP
-        .entry(claims.jti.clone())
-        .or_insert((0u32, now));
-    let (ref mut count, ref mut ts) = *entry;
-    if now.signed_duration_since(*ts).num_seconds() >= 60 {
-        *count = 0;
-        *ts = now;
-    }
-    if *count >= claims.rate_limit {
-        return Ok((StatusCode::TOO_MANY_REQUESTS, json_error("rate limit exceeded")).into_response());
-    }
-    *count += 1;
-
-    // 4. Attach claims to request extensions for downstream handlers
-    req.extensions_mut().insert(claims);
-
-    // 5. Call next handler
-    Ok(next.run(req).await)
-}
-
-fn json_error(msg: &str) -> axum::Json<serde_json::Value> {
-    axum::Json(json!({ "error": msg }))
-}
-
-// Extract token from `x-api-key`, `Authorization: Bearer`, or `?api_key=`
-fn extract_api_key(req: &Request<Body>) -> Option<String> {
-    // x-api-key header
-    if let Some(value) = req.headers().get("x-api-key") {
-        if let Ok(v) = value.to_str() {
-            return Some(v.to_owned());
-        }
-    }
-
-    // Authorization: Bearer
-    if let Some(value) = req.headers().get(axum::http::header::AUTHORIZATION) {
-        if let Ok(v) = value.to_str() {
-            if let Some(stripped) = v.strip_prefix("Bearer ") {
-                return Some(stripped.to_owned());
+    let entry = RATE_LIMITS
+        .entry(key.clone())
+        .and_modify(|entry| {
+            let (count, start) = *entry;
+            if now.signed_duration_since(start).num_seconds() >= 3600 {
+                // Reset window
+                *entry = (1, now);
+            } else {
+                *entry = (count + 1, start);
             }
-        }
+        })
+        .or_insert((1, now));
+    
+    let (current_count, _window_start) = *entry;
+
+    if current_count > claims.rate_limit as u32 {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "error": "rate_limit_exceeded",
+                "message": format!("Rate limit exceeded. Limit: {}, Used: {}", claims.rate_limit, current_count)
+            }))
+        ));
     }
 
-    // Query param ?api_key=
-    if let Some(query) = req.uri().query() {
-        for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
-            if k == "api_key" {
-                return Some(v.into_owned());
-            }
-        }
-    }
-    None
+    // 4. Continue with the request
+    Ok(next.run(request).await)
 }

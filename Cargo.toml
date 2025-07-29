@@ -21,6 +21,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # HTTP client
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "multipart"] }
 
+# FIPS-compliant TLS support
+rustls = "0.21"
+rustls-pemfile = "1.0"
+webpki-roots = "0.25"
+hyper-rustls = "0.24"
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
@@ -49,6 +55,13 @@ blake3 = "1.5"
 base64 = "0.21"    # or latest
 hex = "0.4"
 hmac = "0.12"
+
+# FIPS 140-3 key derivation
+pbkdf2 = { version = "0.12", features = ["simple"] }
+hkdf = "0.12"
+
+# OpenSSL for FIPS compliance
+openssl = "0.10"
 
 # Binary analysis
 goblin = "0.10"

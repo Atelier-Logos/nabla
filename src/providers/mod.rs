@@ -1,9 +1,45 @@
 // src/providers/mod.rs
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub mod http;
 pub use http::HTTPProvider;
+
+/// Centralized manager for inference providers
+pub struct InferenceManager {
+    pub default_provider: Arc<dyn InferenceProvider>,
+}
+
+impl InferenceManager {
+    pub fn new() -> Self {
+        // Create a default HTTP provider
+        let default_provider = Arc::new(HTTPProvider::new(
+            "http://localhost:11434".to_string(),
+            None,
+            None,
+        ));
+        
+        Self {
+            default_provider,
+        }
+    }
+    
+    /// Get the default inference provider
+    pub fn get_default_provider(&self) -> Arc<dyn InferenceProvider> {
+        self.default_provider.clone()
+    }
+    
+    /// Create a new HTTP provider with custom configuration
+    pub fn create_http_provider(
+        &self,
+        inference_url: String,
+        api_key: Option<String>,
+        provider_token: Option<String>,
+    ) -> Arc<dyn InferenceProvider> {
+        Arc::new(HTTPProvider::new(inference_url, api_key, provider_token))
+    }
+}
 
 #[async_trait]
 pub trait InferenceProvider: Send + Sync {

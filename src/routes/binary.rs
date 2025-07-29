@@ -19,6 +19,103 @@ use crate::{AppState, binary::{
     scan_binary_vulnerabilities, VulnerabilityMatch, 
 }};
 
+/// Validates and sanitizes a file path to prevent path traversal attacks
+/// Returns the canonicalized path if valid, or an error if the path is unsafe
+fn validate_file_path(file_path: &str) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
+    // 1. Check for path traversal attempts (..) using string operations
+    if file_path.contains("..") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Path traversal not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 2. Check for absolute paths using string operations
+    if file_path.starts_with('/') || (cfg!(windows) && file_path.contains(':')) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Absolute paths not allowed".to_string(),
+            }),
+        ));
+    }
+    
+    // 3. Create path only after validation
+    let path = std::path::Path::new(file_path);
+    
+    // 4. Define allowed directory (restrict to current working directory)
+    let base_dir = std::env::current_dir().map_err(|_e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "server_error".to_string(),
+                message: "Failed to get current directory".to_string(),
+            }),
+        )
+    })?;
+    
+    // 5. Build the full path and canonicalize it
+    let full_path = base_dir.join(path);
+    let canonical_path = full_path.canonicalize().map_err(|_e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Invalid file path".to_string(),
+            }),
+        )
+    })?;
+    
+    // 6. Security check: Ensure the canonicalized path is within the allowed directory
+    if !canonical_path.starts_with(&base_dir) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Access denied: Path outside allowed directory".to_string(),
+            }),
+        ));
+    }
+    
+    // 7. Check if file exists and is a regular file (not a symlink or directory)
+    if !canonical_path.exists() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_not_found".to_string(),
+                message: "File not found".to_string(),
+            }),
+        ));
+    }
+    
+    // 8. Check if it's a regular file (not a symlink, directory, etc.)
+    let metadata = std::fs::metadata(&canonical_path).map_err(|_e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "file_error".to_string(),
+                message: "Cannot access file".to_string(),
+            }),
+        )
+    })?;
+    
+    if !metadata.is_file() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_input".to_string(),
+                message: "Path is not a regular file".to_string(),
+            }),
+        ));
+    }
+    
+    Ok(canonical_path)
+}
+
 #[derive(Debug, Serialize)]
 pub struct BinaryUploadResponse {
     pub id: Uuid,
@@ -56,17 +153,51 @@ pub struct ChatResponse {
     pub tokens_used: usize,
 }
 
-pub async fn health_check() -> Json<serde_json::Value> {
+pub async fn health_check(
+    State(mut state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let fips_status = if state.config.fips_mode {
+        state.crypto_provider.validate_fips_compliance().is_ok()
+    } else {
+        false
+    };
+
+    let fips_details = if state.config.fips_mode {
+        json!({
+            "fips_mode": true,
+            "fips_compliant": fips_status,
+            "fips_validation": state.config.fips_validation,
+            "approved_algorithms": [
+                "SHA-256",
+                "SHA-512", 
+                "HMAC-SHA256",
+                "AES-256-GCM",
+                "TLS13_AES_256_GCM_SHA384"
+            ],
+            "hash_algorithm": "SHA-512",
+            "random_generator": "FIPS-compliant OS RNG"
+        })
+    } else {
+        json!({
+            "fips_mode": false,
+            "fips_compliant": false,
+            "fips_validation": false,
+            "hash_algorithm": "Blake3",
+            "random_generator": "Standard RNG"
+        })
+    };
+
     Json(json!({
         "status": "healthy",
         "service": "Nabla",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "fips": fips_details
     }))
 }
 
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
@@ -138,7 +269,7 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
     
     // Analyze the binary
-    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider).await.map_err(|e| {
         tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -162,7 +293,7 @@ pub async fn upload_and_analyze_binary(
 }
 
 pub async fn check_cve(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
     tracing::info!("check_cve handler called");
@@ -210,7 +341,7 @@ pub async fn check_cve(
         ));
     }
 
-    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider).await.map_err(|e| {
         tracing::error!("Binary analysis failed: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -232,7 +363,7 @@ pub async fn check_cve(
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     // Extract two files
@@ -270,7 +401,7 @@ pub async fn diff_binaries(
     }
 
     // Analyze each binary to get symbol information
-    let analysis1 = analyze_binary(&files[0].0, &files[0].1).await.map_err(|e| {
+    let analysis1 = analyze_binary(&files[0].0, &files[0].1, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -280,7 +411,7 @@ pub async fn diff_binaries(
         )
     })?;
 
-    let analysis2 = analyze_binary(&files[1].0, &files[1].1).await.map_err(|e| {
+    let analysis2 = analyze_binary(&files[1].0, &files[1].1, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -328,27 +459,31 @@ pub async fn diff_binaries(
 
 #[axum::debug_handler]
 pub async fn chat_with_binary(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(request): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Read file from path
-    let file_content = tokio::fs::read(&request.file_path).await.map_err(|e| {
+    // Validate and sanitize the file path using the helper function
+    let canonical_path = validate_file_path(&request.file_path)?;
+    
+    // Read the file using the validated canonicalized path
+    let file_content = tokio::fs::read(&canonical_path).await.map_err(|_e| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: "file_read_error".to_string(),
-                message: format!("Failed to read file '{}': {}", request.file_path, e),
+                message: "Failed to read file".to_string(),
             }),
         )
     })?;
     
-    let file_name = std::path::Path::new(&request.file_path)
+    // Extract filename safely from the validated canonical path
+    let file_name = canonical_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
     
-    let analysis = analyze_binary(&file_name, &file_content).await.map_err(|e| {
+    let analysis = analyze_binary(&file_name, &file_content, &state.crypto_provider).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
