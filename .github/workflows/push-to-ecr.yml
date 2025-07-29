@@ -55,6 +55,8 @@
             docker build \
             --build-arg DATABASE_URL=${{ secrets.DATABASE_URL }} \
             --build-arg LICENSE_SIGNING_KEY=${{ secrets.LICENSE_SIGNING_KEY }} \
+            --build-arg FIPS_MODE=true \
+            --build-arg FIPS_VALIDATION=true \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
 
