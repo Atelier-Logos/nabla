@@ -555,18 +555,11 @@ pub async fn chat_with_binary(
                     }),
                 ))?;
             
-            let provider = HTTPProvider::with_ssrf_config(
+            let provider = HTTPProvider::new(
                 validated_url.to_string(), 
                 None, 
                 request.provider_token,
-                ssrf_validator,
-            ).map_err(|e| (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "provider_creation_error".to_string(),
-                    message: format!("Failed to create HTTP provider: {}", e),
-                }),
-            ))?;
+            );
             
             let mut options = request.options.unwrap_or_default();
             options.model_path = request.model_path;
