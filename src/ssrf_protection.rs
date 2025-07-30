@@ -26,6 +26,8 @@ impl Default for SSRFConfig {
         
         // AWS Marketplace domains
         whitelisted_domains.insert("platform.atelierlogos.studio".to_string());
+        whitelisted_domains.insert("nabla.atelierlogos.studio".to_string());
+        whitelisted_domains.insert("custom.nabla.com".to_string());
         whitelisted_domains.insert("aws.amazon.com".to_string());
         whitelisted_domains.insert("marketplace.amazonaws.com".to_string());
         

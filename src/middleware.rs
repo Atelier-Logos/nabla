@@ -35,7 +35,7 @@ pub struct PlanFeatures {
     pub custom_models: bool,
     pub sbom_generation: bool,
     pub vulnerability_scanning: bool,
-    pub binary_attestation: bool,
+    pub signed_attestation: bool,
     pub monthly_binaries: u32,
 }
 
@@ -53,7 +53,7 @@ impl PlanFeatures {
             custom_models: false,
             sbom_generation: true,
             vulnerability_scanning: true,
-            binary_attestation: false,
+            signed_attestation: false,
             monthly_binaries: 100,
         }
     }

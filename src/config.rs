@@ -30,6 +30,14 @@ pub struct Config {
     pub deployment_type: DeploymentType,
     #[cfg(feature = "cloud")]
     pub clerk_publishable_key: Option<String>,
+    // Database configuration for AWS Marketplace
+    pub database_url: Option<String>,
+    // AWS Marketplace configuration
+    pub aws_entitlement_url: Option<String>,
+    pub aws_access_key: Option<String>,
+    pub aws_secret_key: Option<String>,
+    pub aws_region: Option<String>,
+    pub marketplace_listing_url: Option<String>,
 }
 
 impl Default for Config {
@@ -42,6 +50,12 @@ impl Default for Config {
             deployment_type: DeploymentType::OSS,
             #[cfg(feature = "cloud")]
             clerk_publishable_key: None,
+            database_url: None,
+            aws_entitlement_url: None,
+            aws_access_key: None,
+            aws_secret_key: None,
+            aws_region: None,
+            marketplace_listing_url: None,
         }
     }
 }
@@ -62,6 +76,12 @@ impl Config {
             deployment_type,
             #[cfg(feature = "cloud")]
             clerk_publishable_key: std::env::var("CLERK_PUBLISHABLE_KEY").ok(),
+            database_url: std::env::var("DATABASE_URL").ok(),
+            aws_entitlement_url: std::env::var("AWS_ENTITLEMENT_URL").ok(),
+            aws_access_key: std::env::var("AWS_ACCESS_KEY_ID").ok(),
+            aws_secret_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
+            aws_region: std::env::var("AWS_REGION").ok(),
+            marketplace_listing_url: std::env::var("MARKETPLACE_LISTING_URL").ok(),
         };
 
         Ok(config)

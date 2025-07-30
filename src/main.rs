@@ -10,6 +10,7 @@ use dotenvy::dotenv;
 use reqwest::Client; // Add import for Client
 use base64::Engine;
 use std::sync::Arc;
+use sqlx::PgPool;
 
 mod config;
 mod routes;
@@ -19,6 +20,7 @@ mod binary;
 mod enterprise;
 
 use enterprise::providers::InferenceManager;
+use enterprise::cloud::{marketplace_routes, MarketplaceState};
 
 use config::Config;
 use middleware::validate_license_jwt;
@@ -32,13 +34,27 @@ pub struct AppState {
     pub license_jwt_secret: Arc<[u8; 32]>,
     pub crypto_provider: enterprise::crypto::CryptoProvider,
     pub inference_manager: Arc<InferenceManager>,
+    pub db: Option<PgPool>,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+pub async fn run_server(port: u16) -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
-    let key_b64 = std::env::var("LICENSE_SIGNING_KEY").expect("LICENSE_SIGNING_KEY env missing");
+    
+    // Load config to check deployment type
+    let config = Config::from_env()?;
+    
+    // Only require LICENSE_SIGNING_KEY for cloud and private deployments
+    let key_b64 = match config.deployment_type {
+        config::DeploymentType::OSS => {
+            // For OSS, use a default key
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"default-server-key-32-bytes-xx")
+        },
+        config::DeploymentType::Cloud | config::DeploymentType::Private => {
+            std::env::var("LICENSE_SIGNING_KEY").expect("LICENSE_SIGNING_KEY env missing for cloud/private deployment")
+        }
+    };
+    
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
     // Ensure length is exactly 32, then convert Vec<u8> to [u8; 32]
     let secret_array: [u8; 32] = decoded
@@ -58,6 +74,16 @@ async fn main() -> anyhow::Result<()> {
 
     // Load configuration
     let config = Config::from_env()?;
+    
+    // Initialize database connection if DATABASE_URL is provided
+    let db = if let Some(database_url) = &config.database_url {
+        let pool = PgPool::connect(database_url).await?;
+        tracing::info!("Database connection established");
+        Some(pool)
+    } else {
+        tracing::info!("No DATABASE_URL provided, marketplace features disabled");
+        None
+    };
     
     // Initialize crypto provider with FIPS configuration
     let mut crypto_provider = enterprise::crypto::CryptoProvider::new(config.fips_mode, config.fips_validation)?;
@@ -110,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         license_jwt_secret,
         crypto_provider,
         inference_manager,
+        db,
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
@@ -118,29 +145,96 @@ async fn main() -> anyhow::Result<()> {
     let public_routes = Router::new()
         .route("/health", axum::routing::get(routes::health_check))
         .route("/debug/multipart", post(routes::debug_multipart));
+    
     // Protected routes (with auth)
     let protected_routes = Router::new()
         .route("/binary/analyze", post(routes::upload_and_analyze_binary))
         .route("/binary/diff", post(routes::diff_binaries))
-        .route("/binary/attest", post(binary::attest_binary))
+        .route("/binary/attest", post(enterprise::attestation::attest_binary))
         .route("/binary/check-cves", post(routes::check_cve))
         .route("/binary/chat", post(routes::chat_with_binary))
         .route_layer(auth_layer);
+
+    // Marketplace routes (if database is available)
+    let marketplace_routes = if let Some(db_pool) = &state.db {
+        let marketplace_state = MarketplaceState {
+            db: db_pool.clone(),
+            jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| "your-jwt-secret".to_string()),
+            aws_entitlement_url: config.aws_entitlement_url.clone().unwrap_or_else(|| "https://entitlement.marketplace.us-east-1.amazonaws.com".to_string()),
+            aws_access_key: config.aws_access_key.clone().unwrap_or_default(),
+            aws_secret_key: config.aws_secret_key.clone().unwrap_or_default(),
+            aws_region: config.aws_region.clone().unwrap_or_else(|| "us-east-1".to_string()),
+        };
+        
+        marketplace_routes().with_state(marketplace_state)
+    } else {
+        Router::new()
+    };
 
     // Build the main app router
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .merge(marketplace_routes)
         .layer(cors)
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", config.port)).await?;
+    let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", port)).await?;
     
-    tracing::info!("Server starting on port {}", config.port);
+    tracing::info!("Server starting on port {}", port);
     tracing::info!("FIPS mode: {}, FIPS validation: {}", config.fips_mode, config.fips_validation);
+    if state.db.is_some() {
+        tracing::info!("Marketplace features enabled");
+    } else {
+        tracing::info!("Marketplace features disabled (no DATABASE_URL)");
+    }
     
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    use clap::Parser;
+    use cli::{NablaCli, Commands};
+    
+    // Parse command line arguments
+    #[derive(Parser)]
+    #[command(name = "nabla")]
+    #[command(about = "Nabla Binary Analysis & Security Platform")]
+    struct Cli {
+        #[command(subcommand)]
+        command: Option<Commands>,
+        
+        /// Run in server mode (legacy)
+        #[arg(long)]
+        server: bool,
+        
+        /// Port for server mode
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    }
+    
+    let cli = Cli::parse();
+    
+    
+    // Handle legacy --server flag
+    if cli.server {
+        return run_server(cli.port).await;
+    }
+    
+    // Handle CLI commands
+    match cli.command {
+        Some(command) => {
+            let mut nabla_cli = NablaCli::new()?;
+            nabla_cli.handle_command(command).await
+        }
+        None => {
+            // Show help when no command is provided
+            let mut nabla_cli = NablaCli::new()?;
+            nabla_cli.show_intro_and_help()
+        }
+    }
 }

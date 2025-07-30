@@ -10,12 +10,13 @@ struct Cli {
     command: Option<Commands>,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let mut nabla_cli = NablaCli::new()?;
 
     match cli.command {
-        Some(command) => nabla_cli.handle_command(command),
-        None => nabla_cli.show_intro_and_help(),
+        Some(command) => nabla_cli.handle_command(command).await,
+        None => nabla_cli.show_intro_and_help().await,
     }
 }

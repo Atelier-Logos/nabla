@@ -44,11 +44,21 @@ impl NablaCli {
                 println!("Deployment ID: {}", jwt_data.deployment_id);
                 
                 // Show available features based on JWT claims
-                if let Some(features) = jwt_data.features.as_ref() {
-                    println!("🎯 Enabled Features:");
-                    for feature in features {
-                        println!("  • {}", feature);
-                    }
+                println!("🎯 Enabled Features:");
+                if jwt_data.features.chat_enabled {
+                    println!("  • Chat (Premium)");
+                }
+                if jwt_data.features.api_access {
+                    println!("  • API Access");
+                }
+                if jwt_data.features.sbom_generation {
+                    println!("  • SBOM Generation");
+                }
+                if jwt_data.features.vulnerability_scanning {
+                    println!("  • Vulnerability Scanning");
+                }
+                if jwt_data.features.custom_models {
+                    println!("  • Custom Models");
                 }
                 
                 self.show_portal_link(&jwt_data)?;
@@ -106,44 +116,59 @@ impl NablaCli {
     fn handle_auth_status(&self) -> Result<()> {
         match self.jwt_store.load_jwt()? {
             Some(jwt_data) => {
-                println!("🔐 Authentication Status");
-                println!("========================");
-                println!("✅ Pro User");
+                println!("✅ Authenticated!");
                 println!("User ID: {}", jwt_data.sub);
                 println!("Deployment ID: {}", jwt_data.deployment_id);
                 
-                // Show enabled features from JWT
-                if let Some(features) = jwt_data.features.as_ref() {
-                    println!("🎯 Enabled Features:");
-                    for feature in features {
-                        println!("  • {}", feature);
-                    }
-                } else {
-                    println!("🎯 Features: Standard Pro features enabled");
+                // Show available features based on JWT claims
+                println!("🎯 Enabled Features:");
+                if jwt_data.features.chat_enabled {
+                    println!("  • Chat (Premium)");
+                }
+                if jwt_data.features.api_access {
+                    println!("  • API Access");
+                }
+                if jwt_data.features.sbom_generation {
+                    println!("  • SBOM Generation");
+                }
+                if jwt_data.features.vulnerability_scanning {
+                    println!("  • Vulnerability Scanning");
+                }
+                if jwt_data.features.signed_attestation {
+                    println!("  • Signed Attestation (Premium)");
+                }
+                if jwt_data.features.custom_models {
+                    println!("  • Custom Models");
                 }
                 
-                let base_url = self.config_store.get_base_url()?;
-                self.show_portal_link_with_base_url(&jwt_data, &base_url)?;
+                self.show_portal_link(&jwt_data)?;
             }
             None => {
-                println!("🔓 OSS User");
-                println!("🎯 Features: Basic binary analysis only");
-                println!("💡 Run 'nabla auth upgrade' to unlock premium features!");
+                println!("❌ Not authenticated");
+                println!();
+                println!("To get started with Nabla Pro:");
+                println!("  • Run 'nabla upgrade' to schedule a demo");
+                println!("  • Or visit: https://cal.com/team/atelier-logos/platform-intro");
+                println!();
+                println!("After our call, you'll receive a token:");
+                println!("  nabla auth --set-jwt <YOUR_TOKEN>");
             }
         }
         Ok(())
     }
 
-    fn show_portal_link(&self, jwt_data: &JwtData) -> Result<()> {
+    pub fn show_portal_link(&self, jwt_data: &JwtData) -> Result<()> {
         let base_url = self.config_store.get_base_url()?;
-        self.show_portal_link_with_base_url(jwt_data, &base_url)
+        self.show_auth_details(jwt_data, &base_url)
     }
 
-    fn show_portal_link_with_base_url(&self, jwt_data: &JwtData, base_url: &str) -> Result<()> {
-        let portal_url = format!("{}/portal/{}/{}", base_url, jwt_data.sub, jwt_data.deployment_id);
+    fn show_auth_details(&self, jwt_data: &JwtData, _base_url: &str) -> Result<()> {
         println!();
-        println!("🌐 Portal URL: {}", portal_url);
-        println!("💡 Visit the portal to manage your account and view analysis results.");
+        println!("🔑 Token: {}", jwt_data.token);
+        println!();
+        println!("💡 You can also use the CLI to analyze binaries:");
+        println!("  nabla analyze /path/to/binary");
+        
         Ok(())
     }
 

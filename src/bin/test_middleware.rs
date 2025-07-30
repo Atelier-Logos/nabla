@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         custom_models: true,
         sbom_generation: true,
         vulnerability_scanning: true,
-        binary_attestation: true,
+        signed_attestation: true,
         monthly_binaries: 1000,
     };
 
@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             custom_models: false,
             sbom_generation: true,
             vulnerability_scanning: true,
-            binary_attestation: false,
+            signed_attestation: false,
             monthly_binaries: 100,
         }),
         ("Premium", PlanFeatures {
@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             custom_models: true,
             sbom_generation: true,
             vulnerability_scanning: true,
-            binary_attestation: true,
+            signed_attestation: true,
             monthly_binaries: 1000,
         }),
         ("Enterprise", PlanFeatures {
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             custom_models: true,
             sbom_generation: true,
             vulnerability_scanning: true,
-            binary_attestation: true,
+            signed_attestation: true,
             monthly_binaries: 10000,
         }),
     ];

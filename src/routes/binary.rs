@@ -497,7 +497,7 @@ pub async fn chat_with_binary(
             StatusCode::FORBIDDEN,
             Json(ErrorResponse {
                 error: "chat_not_available".to_string(),
-                message: "Chat feature is not available with your current license. Please contact sales to upgrade your plan and unlock AI-powered binary analysis. Visit https://nabla.dev/pricing for more information.".to_string(),
+                message: "Chat feature is not available with your current license. Please schedule a demo to upgrade your plan: https://cal.com/team/atelier-logos/platform-intro".to_string(),
             }),
         ));
     }

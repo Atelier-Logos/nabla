@@ -11,7 +11,20 @@ pub struct JwtData {
     pub sub: String,
     pub deployment_id: String,
     pub expires_at: i64,
-    pub features: Option<Vec<String>>,
+    pub features: PlanFeatures,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlanFeatures {
+    pub chat_enabled: bool,
+    pub api_access: bool,
+    pub file_upload_limit_mb: u32,
+    pub concurrent_requests: u32,
+    pub custom_models: bool,
+    pub sbom_generation: bool,
+    pub vulnerability_scanning: bool,
+    pub signed_attestation: bool,
+    pub monthly_binaries: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +32,7 @@ struct JwtClaims {
     pub sub: String,
     pub deployment_id: String,
     pub exp: i64,
-    pub features: Option<Vec<String>>,
+    pub features: PlanFeatures,
 }
 
 pub struct JwtStore {
@@ -79,7 +92,7 @@ impl JwtStore {
         // TODO: Replace with your actual signing key - this should be the same key used in your backend
         // For now using a placeholder - you'll need to set this to your actual signing key
         let signing_key = std::env::var("NABLA_JWT_SECRET")
-            .unwrap_or_else(|_| "your-secret-key-here".to_string());
+            .map_err(|_| anyhow!("NABLA_JWT_SECRET environment variable is required for JWT verification"))?;
         
         let key = DecodingKey::from_secret(signing_key.as_ref());
         let mut validation = Validation::new(Algorithm::HS256);

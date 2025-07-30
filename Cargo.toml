@@ -2,6 +2,12 @@
 name = "nabla"
 version = "0.1.0"
 edition = "2024"
+description = "An OSS SAST/SCA API for calculating your SSCS gradients"
+keywords = ["security", "binary-analysis", "cli", "sbom", "vulnerability"]
+categories = ["command-line-utilities", "development-tools"]
+license = "MIT" # or your preferred license
+repository = "https://github.com/Atelier-Logos/nabla"
+homepage = "https://nabla.atelierlogos.studio"
 
 [features]
 default = ["oss"]
@@ -23,6 +29,7 @@ serde_json = "1.0"
 # Database
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
 
 # HTTP client
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "multipart"] }
@@ -84,11 +91,11 @@ entropy = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
 
-# Additional JSON handling
-# json = "0.12"  # Removed due to RUSTSEC-2022-0081 vulnerability
-
 # Additional dependencies for which crate
 which = "8.0"
+
+# Sigstore for proper attestation signing
+sigstore = { version = "0.12", features = ["cosign", "sign", "verify"] }
 
 # For resolving the home directory
 home = "0.5"
