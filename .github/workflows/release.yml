@@ -1,170 +1,34 @@
-name: Release
+name: Publish to crates.io
 
 on:
   push:
     tags:
-      - 'v*'
-permissions:
-  contents: write
+      - "v*"
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
 
 jobs:
-  create-release:
+  publish:
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Get version from tag
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Nabla v${{ steps.get_version.outputs.version }}
-          body: |
-            ## Nabla v${{ steps.get_version.outputs.version }}
-            
-            Binary analysis and security CLI tool.
-            
-            ### Installation
-            ```bash
-            # Install from GitHub
-            cargo install --git https://github.com/Atelier-Logos/nabla nabla
-            
-            # Or download pre-built binary below
-            ```
-            
-            ### Usage
-            ```bash
-            nabla auth status
-            nabla binary analyze <file>
-            nabla config set-base-url <url>
-            ```
-          draft: false
-          prerelease: false
-
-  build-and-upload:
-    needs: create-release
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset_name: nabla-linux-x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            asset_name: nabla-linux-x86_64-musl
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            asset_name: nabla-macos-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            asset_name: nabla-macos-aarch64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset_name: nabla-windows-x86_64.exe
-
-    runs-on: ${{ matrix.os }}
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup Rust
+      - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
-      - name: Install musl tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Cache cargo dependencies
+      - name: Cache cargo registry and target
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --bin nabla
-
-      - name: Strip binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: strip target/${{ matrix.target }}/release/nabla
-
-      - name: Prepare binary for upload (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cp target/${{ matrix.target }}/release/nabla ${{ matrix.asset_name }}
-          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.asset_name }}
-
-      - name: Prepare binary for upload (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          copy target\${{ matrix.target }}\release\nabla.exe ${{ matrix.asset_name }}
-          7z a ${{ matrix.asset_name }}.zip ${{ matrix.asset_name }}
-
-      - name: Upload Release Asset (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}.tar.gz
-          asset_name: ${{ matrix.asset_name }}.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}.zip
-          asset_name: ${{ matrix.asset_name }}.zip
-          asset_content_type: application/zip
-
-  publish-crate:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/registry
+            ~/.cargo/git
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
+        run: cargo publish --verbose
