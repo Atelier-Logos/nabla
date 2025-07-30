@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,7 +27,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
           release_name: Nabla v${{ steps.get_version.outputs.version }}
           body: |
             ## Nabla v${{ steps.get_version.outputs.version }}
