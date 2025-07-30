@@ -8,6 +8,13 @@ categories = ["command-line-utilities", "development-tools"]
 license = "MIT" # or your preferred license
 repository = "https://github.com/Atelier-Logos/nabla"
 homepage = "https://nabla.atelierlogos.studio"
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "public/**/*"
+]
 
 [features]
 default = ["oss"]

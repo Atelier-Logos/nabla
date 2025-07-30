@@ -20,8 +20,7 @@ Cargo.lock
 .DS_Store
 demo_script.sh
 
-# Enterprise module (cloned during Docker build)
-src/enterprise/
+# Enterprise module included as submodule
 demo_request.json
 chat_request.json
 sbom.json
