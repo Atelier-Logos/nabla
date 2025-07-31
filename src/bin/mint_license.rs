@@ -1,10 +1,10 @@
-use clap::{ArgGroup, Parser};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{Duration, Utc};
+use clap::{ArgGroup, Parser};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::env;
-use base64::{engine::general_purpose, Engine as _};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
+use uuid::Uuid;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -22,7 +22,7 @@ struct Args {
     /// Subject (usually company or user)
     #[arg(long)]
     sub: String,
-    
+
     /// User ID within the company
     #[arg(long)]
     uid: String,
@@ -64,9 +64,9 @@ struct Args {
     #[arg(long, default_value_t = true)]
     vulnerability_scanning: bool,
 
-    /// Enable binary attestation
+    /// Enable signed attestation
     #[arg(long)]
-    binary_attestation: bool,
+    signed_attestation: bool,
 
     /// Monthly binary analysis limit
     #[arg(long, default_value_t = 100)]
@@ -114,11 +114,9 @@ struct PlanFeatures {
     custom_models: bool,
     sbom_generation: bool,
     vulnerability_scanning: bool,
-    binary_attestation: bool,
+    signed_attestation: bool,
     monthly_binaries: u32,
 }
-
-
 
 fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok(); // Load from .env if present
@@ -156,10 +154,10 @@ fn main() -> anyhow::Result<()> {
         custom_models: args.custom_models,
         sbom_generation: args.sbom_generation,
         vulnerability_scanning: args.vulnerability_scanning,
-        binary_attestation: args.binary_attestation,
+        signed_attestation: args.signed_attestation,
         monthly_binaries: args.monthly_binaries,
     };
-    
+
     let claims = Claims {
         sub: args.sub,
         uid: args.uid,
@@ -167,7 +165,10 @@ fn main() -> anyhow::Result<()> {
         iat,
         jti: Uuid::new_v4().to_string(),
         rate_limit: args.rate_limit,
-        deployment_id: args.deployment_id.unwrap_or_else(|| Uuid::new_v4()).to_string(),
+        deployment_id: args
+            .deployment_id
+            .unwrap_or_else(|| Uuid::new_v4())
+            .to_string(),
         features,
     };
 
