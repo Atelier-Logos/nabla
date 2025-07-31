@@ -14,10 +14,6 @@
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/nabla-cli)
 ![GitHub contributors](https://img.shields.io/github/contributors-anon/Atelier-Logos/nabla)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/Atelier-Logos/nabla)
-<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank">
-    <img src="https://app.aikido.dev/assets/badges/label-only-light-theme.svg" alt="Aikido Security Audit Report" height="40" />
-</a>
-
 
 <h1>Nabla – An OSS SAST/SCA API for calculating your SSCS gradients</h1>
 
