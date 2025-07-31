@@ -1,36 +1,56 @@
-use super::{BinaryAnalysis, extract_version_info, extract_license_info};
-use chrono::Utc;
-use uuid::Uuid;
-use sha2::{Sha256, Digest};
-use goblin::{Object as GoblinObject, pe::PE, elf::Elf, mach::{MachO, load_command::CommandVariant}};
-use object::{Object, ObjectSymbol};
-use wasmparser::{Parser, Payload};
-use infer;
-use std::collections::HashSet;
+use super::{BinaryAnalysis, extract_license_info, extract_version_info};
 use crate::enterprise::crypto::CryptoProvider;
+use chrono::Utc;
+use goblin::{
+    Object as GoblinObject,
+    elf::Elf,
+    mach::{MachO, load_command::CommandVariant},
+    pe::PE,
+};
+use infer;
+use object::{Object, ObjectSymbol};
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use uuid::Uuid;
+use wasmparser::{Parser, Payload};
 
-pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &CryptoProvider) -> anyhow::Result<BinaryAnalysis> {
-    tracing::info!("Starting binary analysis for '{}' ({} bytes)", file_name, contents.len());
-    
+pub async fn analyze_binary(
+    file_name: &str,
+    contents: &[u8],
+    crypto_provider: &CryptoProvider,
+) -> anyhow::Result<BinaryAnalysis> {
+    tracing::info!(
+        "Starting binary analysis for '{}' ({} bytes)",
+        file_name,
+        contents.len()
+    );
+
     // Early validation for very small files
     if contents.len() < 50 {
-        tracing::warn!("File is very small ({} bytes), likely not a binary executable", contents.len());
+        tracing::warn!(
+            "File is very small ({} bytes), likely not a binary executable",
+            contents.len()
+        );
         return analyze_small_file(file_name, contents, crypto_provider);
     }
-    
+
     let sha256_hash = Sha256::digest(contents);
     let alternative_hash = crypto_provider.hash_alternative(contents)?;
-    
+
     // Detect file type with more detailed logging
     let detected_type = infer::get(contents);
     let file_type = if let Some(kind) = detected_type {
-        tracing::info!("Detected file type: {} ({})", kind.mime_type(), kind.extension());
+        tracing::info!(
+            "Detected file type: {} ({})",
+            kind.mime_type(),
+            kind.extension()
+        );
         kind.mime_type().to_string()
     } else {
         tracing::debug!("Could not detect file type, using fallback");
         detect_file_type_fallback(file_name, contents)
     };
-    
+
     let mut analysis = BinaryAnalysis {
         id: Uuid::new_v4(),
         file_name: file_name.to_string(),
@@ -59,7 +79,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
 
     // Try different parsing strategies based on file type and magic bytes
     let mut parsed_successfully = false;
-    
+
     if contents.len() >= 4 {
         match &contents[0..4] {
             [0x7f, b'E', b'L', b'F'] => {
@@ -84,7 +104,9 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
                             analysis.format = "macho-fat".to_string();
                             analysis.architecture = "multi".to_string();
                         }
-                        goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho, contents)?,
+                        goblin::mach::Mach::Binary(macho) => {
+                            analyze_macho(&mut analysis, &macho, contents)?
+                        }
                     }
                     parsed_successfully = true;
                 }
@@ -98,7 +120,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
             _ => {}
         }
     }
-    
+
     if !parsed_successfully {
         tracing::debug!("No specific magic bytes found, attempting generic goblin parsing...");
         match GoblinObject::parse(contents) {
@@ -122,7 +144,9 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
                                 analysis.format = "macho-fat".to_string();
                                 analysis.architecture = "multi".to_string();
                             }
-                            goblin::mach::Mach::Binary(macho) => analyze_macho(&mut analysis, &macho, contents)?,
+                            goblin::mach::Mach::Binary(macho) => {
+                                analyze_macho(&mut analysis, &macho, contents)?
+                            }
                         }
                         parsed_successfully = true;
                     }
@@ -145,7 +169,7 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
             }
         }
     }
-    
+
     if !parsed_successfully {
         tracing::info!("All specialized parsers failed, using generic analysis");
         analyze_unknown_binary(&mut analysis, contents)?;
@@ -155,17 +179,35 @@ pub async fn analyze_binary(file_name: &str, contents: &[u8], crypto_provider: &
 
     // Extract version and license information
     tracing::debug!("Extracting version and license metadata");
-    analysis.version_info = Some(extract_version_info(contents, &analysis.embedded_strings, &analysis.format));
+    analysis.version_info = Some(extract_version_info(
+        contents,
+        &analysis.embedded_strings,
+        &analysis.format,
+    ));
     analysis.license_info = Some(extract_license_info(&analysis.embedded_strings));
-    
-    tracing::info!("Metadata extraction complete: version_confidence={:.2}, license_confidence={:.2}", 
-                   analysis.version_info.as_ref().map(|v| v.confidence).unwrap_or(0.0),
-                   analysis.license_info.as_ref().map(|l| l.confidence).unwrap_or(0.0));
+
+    tracing::info!(
+        "Metadata extraction complete: version_confidence={:.2}, license_confidence={:.2}",
+        analysis
+            .version_info
+            .as_ref()
+            .map(|v| v.confidence)
+            .unwrap_or(0.0),
+        analysis
+            .license_info
+            .as_ref()
+            .map(|l| l.confidence)
+            .unwrap_or(0.0)
+    );
 
     Ok(analysis)
 }
 
-fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO, contents: &[u8]) -> anyhow::Result<()> {
+fn analyze_macho(
+    analysis: &mut BinaryAnalysis,
+    macho: &MachO,
+    contents: &[u8],
+) -> anyhow::Result<()> {
     analysis.format = "macho".to_string();
 
     // Determine architecture
@@ -248,11 +290,13 @@ fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO, contents: &[u8]) 
             }
             CommandVariant::VersionMinMacosx(ref ver) => {
                 let (major, minor) = unpack_version(ver.version);
-                metadata["min_os_version"] = serde_json::Value::String(format!("{}.{}", major, minor));
+                metadata["min_os_version"] =
+                    serde_json::Value::String(format!("{}.{}", major, minor));
             }
             CommandVariant::BuildVersion(ref build) => {
                 let (major, minor) = unpack_version(build.minos);
-                metadata["min_os_version"] = serde_json::Value::String(format!("{}.{}", major, minor));
+                metadata["min_os_version"] =
+                    serde_json::Value::String(format!("{}.{}", major, minor));
             }
             _ => {}
         }
@@ -266,7 +310,11 @@ fn analyze_macho(analysis: &mut BinaryAnalysis, macho: &MachO, contents: &[u8]) 
     analysis.static_linked = macho.libs.is_empty() && symbol_set.iter().any(|s| s.contains("main"));
 
     // Extract potential CPE identifiers for CVE matching
-    let cpe_candidates = extract_cpe_candidates(&analysis.linked_libraries, &analysis.imports, &analysis.detected_symbols);
+    let cpe_candidates = extract_cpe_candidates(
+        &analysis.linked_libraries,
+        &analysis.imports,
+        &analysis.detected_symbols,
+    );
     analysis.metadata = serde_json::json!({
         "macho_metadata": metadata,
         "cpe_candidates": cpe_candidates,
@@ -307,9 +355,15 @@ fn extract_cpe_candidates(libs: &[String], imports: &[String], symbols: &[String
     for item in libs.iter().chain(imports.iter()).chain(symbols.iter()) {
         let item_lower = item.to_lowercase();
         // Example: Convert "libcrypto.1.1.dylib" to "cpe:2.3:a:openssl:openssl:1.1:*:*:*:*:*:*:*"
-        if item_lower.contains("openssl") || item_lower.contains("libcrypto") || item_lower.contains("libssl") {
+        if item_lower.contains("openssl")
+            || item_lower.contains("libcrypto")
+            || item_lower.contains("libssl")
+        {
             if let Some(version) = extract_version_from_lib_name(&item_lower) {
-                cpes.insert(format!("cpe:2.3:a:openssl:openssl:{}:*:*:*:*:*:*:*", version));
+                cpes.insert(format!(
+                    "cpe:2.3:a:openssl:openssl:{}:*:*:*:*:*:*:*",
+                    version
+                ));
             } else {
                 cpes.insert("cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*".to_string());
             }
@@ -331,7 +385,7 @@ fn extract_cpe_candidates(libs: &[String], imports: &[String], symbols: &[String
 
 fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> anyhow::Result<()> {
     analysis.format = "elf".to_string();
-    
+
     // Determine architecture
     analysis.architecture = match elf.header.e_machine {
         goblin::elf::header::EM_X86_64 => "x86_64".to_string(),
@@ -368,7 +422,8 @@ fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> any
     }
 
     // Determine if statically linked
-    analysis.static_linked = elf.libraries.is_empty() && elf.header.e_type == goblin::elf::header::ET_EXEC;
+    analysis.static_linked =
+        elf.libraries.is_empty() && elf.header.e_type == goblin::elf::header::ET_EXEC;
 
     // Extract imports/exports using object crate for more detailed analysis
     if let Ok(obj_file) = object::File::parse(contents) {
@@ -388,7 +443,7 @@ fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> any
 
 fn analyze_pe(analysis: &mut BinaryAnalysis, pe: &PE, _contents: &[u8]) -> anyhow::Result<()> {
     analysis.format = "pe".to_string();
-    
+
     // Determine architecture
     analysis.architecture = match pe.header.coff_header.machine {
         goblin::pe::header::COFF_MACHINE_X86_64 => "x86_64".to_string(),
@@ -427,14 +482,14 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
     analysis.format = "application/wasm".to_string();
     analysis.architecture = "wasm32".to_string();
     analysis.languages.push("WebAssembly".to_string());
-    
+
     let parser = Parser::new(0);
     let mut imports = HashSet::new();
     let mut exports = HashSet::new();
     let mut function_count = 0;
     let mut memory_info = Vec::new();
     let mut table_info = Vec::new();
-    
+
     for payload in parser.parse_all(contents) {
         use wasmparser::Payload as WasmPayload;
         match payload {
@@ -449,7 +504,11 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                                 Ok(import) => {
                                     let import_name = format!("{}::{}", import.module, import.name);
                                     imports.insert(import_name);
-                                    tracing::debug!("Found import: {}::{}", import.module, import.name);
+                                    tracing::debug!(
+                                        "Found import: {}::{}",
+                                        import.module,
+                                        import.name
+                                    );
                                 }
                                 Err(e) => tracing::warn!("Failed to parse import: {}", e),
                             }
@@ -474,8 +533,10 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                         for memory in reader {
                             match memory {
                                 Ok(memory) => {
-                                    memory_info.push(format!("initial: {}, maximum: {:?}", 
-                                                           memory.initial, memory.maximum));
+                                    memory_info.push(format!(
+                                        "initial: {}, maximum: {:?}",
+                                        memory.initial, memory.maximum
+                                    ));
                                 }
                                 Err(e) => tracing::warn!("Failed to parse memory: {}", e),
                             }
@@ -485,8 +546,10 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                         for table in reader {
                             match table {
                                 Ok(table) => {
-                                    table_info.push(format!("element_type: {:?}, initial: {}, maximum: {:?}", 
-                                                           table.ty.element_type, table.ty.initial, table.ty.maximum));
+                                    table_info.push(format!(
+                                        "element_type: {:?}, initial: {}, maximum: {:?}",
+                                        table.ty.element_type, table.ty.initial, table.ty.maximum
+                                    ));
                                 }
                                 Err(e) => tracing::warn!("Failed to parse table: {}", e),
                             }
@@ -513,11 +576,11 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
             }
         }
     }
-    
+
     analysis.imports = imports.into_iter().collect();
     analysis.exports = exports.into_iter().collect();
     analysis.static_linked = true; // WASM modules are self-contained
-    
+
     // Add WASM-specific metadata
     analysis.metadata = serde_json::json!({
         "wasm_version": "1.0",
@@ -528,25 +591,34 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
         "export_count": analysis.exports.len(),
         "analysis_type": "wasm"
     });
-    
-    tracing::info!("WASM analysis complete: {} imports, {} exports, {} functions", 
-                   analysis.imports.len(), analysis.exports.len(), function_count);
-    
+
+    tracing::info!(
+        "WASM analysis complete: {} imports, {} exports, {} functions",
+        analysis.imports.len(),
+        analysis.exports.len(),
+        function_count
+    );
+
     Ok(())
 }
 
 fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
     tracing::debug!("Performing generic binary analysis");
-    
+
     // Try to determine if it's a text file
-    let text_ratio = contents.iter()
+    let text_ratio = contents
+        .iter()
         .filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace())
-        .count() as f64 / contents.len() as f64;
-    
+        .count() as f64
+        / contents.len() as f64;
+
     if text_ratio > 0.7 {
         analysis.format = "text".to_string();
-        tracing::debug!("Detected text file ({}% ASCII)", (text_ratio * 100.0) as u32);
-        
+        tracing::debug!(
+            "Detected text file ({}% ASCII)",
+            (text_ratio * 100.0) as u32
+        );
+
         // Try to extract more information from text files
         let text = String::from_utf8_lossy(contents);
         {
@@ -555,7 +627,7 @@ fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> any
                 analysis.format = "script".to_string();
                 analysis.languages.push("script".to_string());
             }
-            
+
             // Look for common programming patterns
             if text.contains("function") || text.contains("def ") {
                 analysis.languages.push("script".to_string());
@@ -569,69 +641,86 @@ fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> any
         }
     } else {
         analysis.format = "binary".to_string();
-        tracing::debug!("Detected binary file ({}% ASCII)", (text_ratio * 100.0) as u32);
+        tracing::debug!(
+            "Detected binary file ({}% ASCII)",
+            (text_ratio * 100.0) as u32
+        );
     }
-    
+
     analysis.architecture = "unknown".to_string();
-    
+
     // Add some basic metadata
     analysis.metadata = serde_json::json!({
         "ascii_ratio": text_ratio,
         "analysis_type": "generic"
     });
-    
+
     Ok(())
 }
 
-fn analyze_small_file(file_name: &str, contents: &[u8], crypto_provider: &CryptoProvider) -> anyhow::Result<BinaryAnalysis> {
-    tracing::info!("Analyzing small file '{}' ({} bytes)", file_name, contents.len());
-    
+fn analyze_small_file(
+    file_name: &str,
+    contents: &[u8],
+    crypto_provider: &CryptoProvider,
+) -> anyhow::Result<BinaryAnalysis> {
+    tracing::info!(
+        "Analyzing small file '{}' ({} bytes)",
+        file_name,
+        contents.len()
+    );
+
     let sha256_hash = Sha256::digest(contents);
     let alternative_hash = crypto_provider.hash_alternative(contents)?;
-    
+
     // For small files, just extract strings and basic info
     let strings = extract_strings(contents);
     let text_content = String::from_utf8_lossy(contents);
-    
+
     // Check if it's mostly text
-    let text_ratio = contents.iter()
+    let text_ratio = contents
+        .iter()
         .filter(|&&b| b.is_ascii_graphic() || b.is_ascii_whitespace())
-        .count() as f64 / contents.len() as f64;
-    
+        .count() as f64
+        / contents.len() as f64;
+
     let format = if text_ratio > 0.8 {
         "text/plain"
     } else {
         "application/octet-stream"
-    }.to_string();
-    
+    }
+    .to_string();
+
     // Try to determine what kind of small file this is
     let mut languages = Vec::new();
     let mut analysis_notes = Vec::new();
-    
+
     if strings.iter().any(|s| s.ends_with(".wasm")) {
         analysis_notes.push("Contains WASM module reference".to_string());
         languages.push("WebAssembly".to_string());
     }
-    
-    if strings.iter().any(|s| s.ends_with(".dll") || s.ends_with(".exe")) {
+
+    if strings
+        .iter()
+        .any(|s| s.ends_with(".dll") || s.ends_with(".exe"))
+    {
         analysis_notes.push("Contains Windows executable reference".to_string());
     }
-    
+
     if text_content.starts_with("#!") {
         languages.push("Script".to_string());
         analysis_notes.push("Shell script or executable script".to_string());
     }
-    
+
     let metadata = serde_json::json!({
         "ascii_ratio": text_ratio,
         "analysis_type": "small_file",
         "notes": analysis_notes,
         "content_preview": text_content.chars().take(50).collect::<String>()
     });
-    
+
     let version_info = extract_version_info(contents, &strings, &format);
     let license_info = extract_license_info(&strings);
-    
+
     Ok(BinaryAnalysis {
         id: Uuid::new_v4(),
         file_name: file_name.to_string(),
@@ -662,12 +751,14 @@ fn detect_file_type_fallback(file_name: &str, contents: &[u8]) -> String {
         match &contents[0..4] {
             [0x7f, b'E', b'L', b'F'] => return "application/x-elf".to_string(),
             [b'M', b'Z', _, _] => return "application/x-msdownload".to_string(), // PE
-            [0xfe, 0xed, 0xfa, 0xce] | [0xce, 0xfa, 0xed, 0xfe] => return "application/x-mach-binary".to_string(),
+            [0xfe, 0xed, 0xfa, 0xce] | [0xce, 0xfa, 0xed, 0xfe] => {
+                return "application/x-mach-binary".to_string();
+            }
             [0x00, 0x61, 0x73, 0x6d] => return "application/wasm".to_string(), // WASM
             _ => {}
         }
     }
-    
+
     // Check file extension
     if let Some(ext) = file_name.split('.').last() {
         match ext.to_lowercase().as_str() {
@@ -678,21 +769,22 @@ fn detect_file_type_fallback(file_name: &str, contents: &[u8]) -> String {
             _ => {}
         }
     }
-    
+
     "application/octet-stream".to_string()
 }
 
 fn extract_strings(contents: &[u8]) -> Vec<String> {
     let mut strings = Vec::new();
     let mut current_string = Vec::new();
-    
+
     tracing::debug!("Extracting strings from {} bytes", contents.len());
-    
+
     for &byte in contents {
         if byte.is_ascii_graphic() || byte == b' ' || byte == b'\t' {
             current_string.push(byte);
         } else {
-            if current_string.len() >= 3 { // Reduced minimum for small files
+            if current_string.len() >= 3 {
+                // Reduced minimum for small files
                 if let Ok(s) = String::from_utf8(current_string.clone()) {
                     // Filter out very common/useless strings
                     if !s.trim().is_empty() && !is_junk_string(&s) {
@@ -703,7 +795,7 @@ fn extract_strings(contents: &[u8]) -> Vec<String> {
             current_string.clear();
         }
     }
-    
+
     // Process any remaining string
     if current_string.len() >= 3 {
         if let Ok(s) = String::from_utf8(current_string) {
@@ -712,12 +804,12 @@ fn extract_strings(contents: &[u8]) -> Vec<String> {
             }
         }
     }
-    
+
     // Deduplicate and limit
     strings.sort();
     strings.dedup();
     strings.truncate(50);
-    
+
     tracing::debug!("Extracted {} strings", strings.len());
     strings
 }

@@ -1,10 +1,10 @@
 // tests/middleware_tests.rs
 
 use axum::{
+    Router,
     body::Body,
     http::{Request, StatusCode},
     routing::post,
-    Router,
 };
 use nabla::{AppState, Config, middleware::validate_license_jwt};
 use std::sync::Arc;
@@ -25,7 +25,7 @@ async fn test_middleware_fips_mode_enabled() {
         // Add other required fields
         ..Default::default()
     };
-    
+
     let state = AppState {
         config,
         client: reqwest::Client::new(),
@@ -36,7 +36,10 @@ async fn test_middleware_fips_mode_enabled() {
 
     let app = Router::new()
         .route("/test", post(test_protected_route))
-        .route_layer(axum::middleware::from_fn_with_state(state, validate_license_jwt));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state,
+            validate_license_jwt,
+        ));
 
     // Test without authorization header - should fail
     let request = Request::builder()
@@ -59,7 +62,7 @@ async fn test_middleware_fips_mode_disabled() {
         // Add other required fields
         ..Default::default()
     };
-    
+
     let state = AppState {
         config,
         client: reqwest::Client::new(),
@@ -70,7 +73,10 @@ async fn test_middleware_fips_mode_disabled() {
 
     let app = Router::new()
         .route("/test", post(test_protected_route))
-        .route_layer(axum::middleware::from_fn_with_state(state, validate_license_jwt));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state,
+            validate_license_jwt,
+        ));
 
     // Test without authorization header - should succeed when FIPS mode is disabled
     let request = Request::builder()
@@ -81,8 +87,10 @@ async fn test_middleware_fips_mode_disabled() {
 
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     assert_eq!(body, "protected");
 }
 
@@ -93,4 +101,4 @@ fn test_config_default_implementation() {
     assert_eq!(config.port, 8080);
     assert!(!config.fips_mode);
     assert!(!config.fips_validation);
-} 
+}

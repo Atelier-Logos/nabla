@@ -1,7 +1,20 @@
 [package]
-name = "nabla"
-version = "0.1.0"
+name = "nabla-core"
+version = "0.1.1"
 edition = "2024"
+description = "An OSS SAST/SCA API for calculating your SSCS gradients"
+keywords = ["security", "binary-analysis", "cli", "sbom", "vulnerability"]
+categories = ["command-line-utilities", "development-tools"]
+license = "MIT" # or your preferred license
+repository = "https://github.com/Atelier-Logos/nabla"
+homepage = "https://nabla.atelierlogos.studio"
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "public/**/*"
+]
 
 [features]
 default = ["oss"]
@@ -84,11 +97,11 @@ entropy = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
 
-# Additional JSON handling
-# json = "0.12"  # Removed due to RUSTSEC-2022-0081 vulnerability
-
 # Additional dependencies for which crate
 which = "8.0"
+
+# Sigstore for proper attestation signing
+sigstore = { version = "0.12", features = ["cosign", "sign", "verify"] }
 
 # For resolving the home directory
 home = "0.5"

@@ -1,8 +1,8 @@
+use anyhow::Result;
 use once_cell::sync::Lazy;
+use serde::Serialize;
 use serde_json::Value;
 use std::{fs::File, io::BufReader, path::Path};
-use anyhow::Result;
-use serde::Serialize;
 
 use super::BinaryAnalysis;
 
@@ -22,16 +22,14 @@ pub struct CveEntry {
 }
 
 // Lazily-loaded CVE database so we incur the cost only once per process.
-static CVE_DB: Lazy<Vec<CveEntry>> = Lazy::new(|| {
-    match load_cve_db() {
-        Ok(db) => {
-            tracing::info!("Loaded {} CVE records", db.len());
-            db
-        }
-        Err(e) => {
-            tracing::error!("Failed to load CVE DB: {}", e);
-            Vec::new()
-        }
+static CVE_DB: Lazy<Vec<CveEntry>> = Lazy::new(|| match load_cve_db() {
+    Ok(db) => {
+        tracing::info!("Loaded {} CVE records", db.len());
+        db
+    }
+    Err(e) => {
+        tracing::error!("Failed to load CVE DB: {}", e);
+        Vec::new()
     }
 });
 
@@ -69,7 +67,11 @@ pub fn load_cve_db() -> Result<Vec<CveEntry>> {
                 collect_cpes(configs, &mut cpes);
             }
 
-            entries.push(CveEntry { id, description, cpes });
+            entries.push(CveEntry {
+                id,
+                description,
+                cpes,
+            });
         }
     }
     Ok(entries)
@@ -112,8 +114,16 @@ pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<Vulnerabili
         .collect();
 
     // Add CPE candidates from metadata
-    if let Some(cpe_candidates) = analysis.metadata.get("cpe_candidates").and_then(|c| c.as_array()) {
-        keywords.extend(cpe_candidates.iter().filter_map(|c| c.as_str().map(|s| s.to_string())));
+    if let Some(cpe_candidates) = analysis
+        .metadata
+        .get("cpe_candidates")
+        .and_then(|c| c.as_array())
+    {
+        keywords.extend(
+            cpe_candidates
+                .iter()
+                .filter_map(|c| c.as_str().map(|s| s.to_string())),
+        );
     }
 
     let mut matches = Vec::new();
