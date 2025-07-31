@@ -1,10 +1,11 @@
-
-use nabla::binary::BinaryAnalysis;
-use nabla::enterprise::providers::{HTTPProvider, InferenceProvider, GenerationOptions, GenerationResponse, InferenceError};
 use async_trait::async_trait;
+use chrono;
+use nabla_cli::binary::BinaryAnalysis;
+use nabla_cli::enterprise::providers::{
+    GenerationOptions, GenerationResponse, HTTPProvider, InferenceError, InferenceProvider,
+};
 use serde_json::json;
 use uuid;
-use chrono;
 
 // Mock provider for testing AI enhanced features
 struct MockProvider {
@@ -19,7 +20,7 @@ impl MockProvider {
             response_text: response_text.to_string(),
         }
     }
-    
+
     fn with_failure() -> Self {
         Self {
             should_fail: true,
@@ -30,9 +31,15 @@ impl MockProvider {
 
 #[async_trait]
 impl InferenceProvider for MockProvider {
-    async fn generate(&self, _prompt: &str, _options: &GenerationOptions) -> Result<GenerationResponse, InferenceError> {
+    async fn generate(
+        &self,
+        _prompt: &str,
+        _options: &GenerationOptions,
+    ) -> Result<GenerationResponse, InferenceError> {
         if self.should_fail {
-            Err(InferenceError::NetworkError("Mock network error".to_string()))
+            Err(InferenceError::NetworkError(
+                "Mock network error".to_string(),
+            ))
         } else {
             Ok(GenerationResponse {
                 text: self.response_text.clone(),
@@ -41,7 +48,7 @@ impl InferenceProvider for MockProvider {
             })
         }
     }
-    
+
     async fn is_available(&self) -> bool {
         !self.should_fail
     }
@@ -79,8 +86,6 @@ fn create_test_analysis() -> BinaryAnalysis {
 // AI Enhanced Tests
 // ============================================================================
 
-
-
 // ============================================================================
 // HTTP Provider Constructor Tests (Basic functionality only)
 // ============================================================================
@@ -90,21 +95,17 @@ async fn test_http_provider_constructor() {
     let _provider = HTTPProvider::new(
         "http://localhost:11434".to_string(),
         Some("test-key".to_string()),
-        Some("provider-token".to_string())
+        Some("provider-token".to_string()),
     );
-    
+
     // Test that provider was created successfully
     assert!(true);
 }
 
 #[tokio::test]
 async fn test_http_provider_constructor_minimal() {
-    let _provider = HTTPProvider::new(
-        "http://localhost:11434".to_string(),
-        None,
-        None
-    );
-    
+    let _provider = HTTPProvider::new("http://localhost:11434".to_string(), None, None);
+
     // Test that provider was created successfully
     assert!(true);
 }
@@ -136,7 +137,7 @@ async fn test_generation_options_custom() {
         hf_repo: Some("test/repo".to_string()),
         model: Some("gpt-4".to_string()),
     };
-    
+
     assert_eq!(options.max_tokens, 1024);
     assert_eq!(options.temperature, 0.5);
     assert_eq!(options.top_p, 0.8);
@@ -153,7 +154,7 @@ async fn test_generation_response() {
         tokens_used: 10,
         finish_reason: "stop".to_string(),
     };
-    
+
     assert_eq!(response.text, "Hello, world!");
     assert_eq!(response.tokens_used, 10);
     assert_eq!(response.finish_reason, "stop");
@@ -164,17 +165,17 @@ fn test_inference_error_variants() {
     let network_error = InferenceError::NetworkError("connection failed".to_string());
     let server_error = InferenceError::ServerError("500 Internal Server Error".to_string());
     let no_provider = InferenceError::NoAvailableProvider;
-    
+
     match network_error {
         InferenceError::NetworkError(msg) => assert_eq!(msg, "connection failed"),
         _ => panic!("Expected NetworkError"),
     }
-    
+
     match server_error {
         InferenceError::ServerError(msg) => assert_eq!(msg, "500 Internal Server Error"),
         _ => panic!("Expected ServerError"),
     }
-    
+
     match no_provider {
         InferenceError::NoAvailableProvider => assert!(true),
         _ => panic!("Expected NoAvailableProvider"),
@@ -187,12 +188,8 @@ fn test_inference_error_variants() {
 
 #[tokio::test]
 async fn test_http_provider_llama_cpp_mode() {
-    let _provider = HTTPProvider::new(
-        "http://localhost:11434".to_string(),
-        None,
-        None,
-    );
-    
+    let _provider = HTTPProvider::new("http://localhost:11434".to_string(), None, None);
+
     let _options = GenerationOptions {
         model_path: Some("models/test.gguf".to_string()),
         max_tokens: 100,
@@ -202,7 +199,7 @@ async fn test_http_provider_llama_cpp_mode() {
         hf_repo: None,
         model: None,
     };
-    
+
     // Test that the provider and options are created correctly
     assert!(true);
 }
@@ -214,7 +211,7 @@ async fn test_http_provider_openai_mode() {
         Some("sk-test-key".to_string()),
         None,
     );
-    
+
     let _options = GenerationOptions {
         model: Some("gpt-3.5-turbo".to_string()),
         max_tokens: 100,
@@ -224,19 +221,15 @@ async fn test_http_provider_openai_mode() {
         model_path: None,
         hf_repo: None,
     };
-    
+
     // Test that the provider and options are created correctly
     assert!(true);
 }
 
 #[tokio::test]
 async fn test_http_provider_with_hf_repo() {
-    let _provider = HTTPProvider::new(
-        "http://localhost:11434".to_string(),
-        None,
-        None,
-    );
-    
+    let _provider = HTTPProvider::new("http://localhost:11434".to_string(), None, None);
+
     let _options = GenerationOptions {
         hf_repo: Some("microsoft/DialoGPT-medium".to_string()),
         max_tokens: 100,
@@ -246,7 +239,7 @@ async fn test_http_provider_with_hf_repo() {
         model_path: None,
         model: None,
     };
-    
+
     // Test that the provider and options are created correctly
     assert!(true);
 }
@@ -258,7 +251,7 @@ async fn test_http_provider_with_provider_token() {
         None,
         Some("tgp_v1_test_token".to_string()),
     );
-    
+
     let _options = GenerationOptions {
         model: Some("moonshotai/Kimi-K2-Instruct".to_string()),
         max_tokens: 100,
@@ -268,7 +261,7 @@ async fn test_http_provider_with_provider_token() {
         model_path: None,
         hf_repo: None,
     };
-    
+
     // Test that the provider and options are created correctly
     assert!(true);
 }
@@ -276,5 +269,3 @@ async fn test_http_provider_with_provider_token() {
 // ============================================================================
 // AI Enhanced with Custom Options Tests
 // ============================================================================
-
- 

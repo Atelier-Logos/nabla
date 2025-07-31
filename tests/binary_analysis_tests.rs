@@ -1,7 +1,10 @@
 // tests/binary_analysis_tests.rs
 
-use nabla::binary::{analyze_binary, BinaryAnalysis, metadata_extractor::{VersionInfo, LicenseInfo}};
-use nabla::enterprise::crypto::CryptoProvider;
+use nabla_cli::binary::{
+    BinaryAnalysis, analyze_binary,
+    metadata_extractor::{LicenseInfo, VersionInfo},
+};
+use nabla_cli::enterprise::crypto::CryptoProvider;
 use tokio;
 
 // Helper function to create a test crypto provider
@@ -13,7 +16,9 @@ fn create_test_crypto_provider() -> CryptoProvider {
 async fn test_analyze_binary_small_file() {
     let data = b"hello world"; // small, triggers small file path
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("hello.txt", data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary("hello.txt", data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "hello.txt");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -22,7 +27,9 @@ async fn test_analyze_binary_small_file() {
 async fn test_analyze_binary_empty_file() {
     let data = b"";
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("empty.bin", data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary("empty.bin", data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "empty.bin");
     assert_eq!(analysis.size_bytes, 0);
     assert_eq!(analysis.embedded_strings.len(), 0);
@@ -33,7 +40,9 @@ async fn test_analyze_binary_large_file() {
     // Create a larger file to test different code paths
     let data = vec![0u8; 10000]; // 10KB file
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("large.bin", &data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary("large.bin", &data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "large.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -42,7 +51,9 @@ async fn test_analyze_binary_large_file() {
 async fn test_analyze_binary_with_special_chars() {
     let data = b"test data with special chars: !@#$%^&*()";
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("special@chars#file.bin", data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary("special@chars#file.bin", data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "special@chars#file.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -51,7 +62,9 @@ async fn test_analyze_binary_with_special_chars() {
 async fn test_analyze_binary_unicode_filename() {
     let data = b"test data";
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("测试文件.bin", data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary("测试文件.bin", data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "测试文件.bin");
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -61,7 +74,9 @@ async fn test_analyze_binary_very_long_filename() {
     let data = b"test data";
     let long_name = "a".repeat(255); // Very long filename
     let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary(&long_name, data, &crypto_provider).await.expect("analyze_binary failed");
+    let analysis = analyze_binary(&long_name, data, &crypto_provider)
+        .await
+        .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, long_name);
     assert_eq!(analysis.size_bytes as usize, data.len());
 }
@@ -103,7 +118,7 @@ async fn test_binary_analysis_struct() {
         created_at: chrono::Utc::now(),
         sbom: None,
     };
-    
+
     assert_eq!(analysis.file_name, "test.bin");
     assert_eq!(analysis.format, "application/x-elf");
     assert_eq!(analysis.architecture, "x86_64");
@@ -144,7 +159,7 @@ fn test_binary_analysis_serialization() {
         created_at: chrono::Utc::now(),
         sbom: None,
     };
-    
+
     // Test serialization
     let serialized = serde_json::to_string(&analysis).unwrap();
     assert!(serialized.contains("test.bin"));
@@ -152,7 +167,7 @@ fn test_binary_analysis_serialization() {
     assert!(serialized.contains("x86_64"));
     assert!(serialized.contains("test_hash"));
     assert!(serialized.contains("1024"));
-    
+
     // Test deserialization
     let deserialized: BinaryAnalysis = serde_json::from_str(&serialized).unwrap();
     assert_eq!(deserialized.file_name, "test.bin");
@@ -185,7 +200,7 @@ fn test_binary_analysis_debug() {
         created_at: chrono::Utc::now(),
         sbom: None,
     };
-    
+
     let debug_str = format!("{:?}", analysis);
     assert!(debug_str.contains("test.bin"));
     assert!(debug_str.contains("application/x-elf"));
@@ -216,7 +231,7 @@ fn test_binary_analysis_clone() {
         created_at: chrono::Utc::now(),
         sbom: None,
     };
-    
+
     let cloned_analysis = analysis.clone();
     assert_eq!(analysis.file_name, cloned_analysis.file_name);
     assert_eq!(analysis.format, cloned_analysis.format);

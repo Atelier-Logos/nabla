@@ -1,8 +1,9 @@
 // tests/cve_tests.rs
 
-use nabla::binary::{
-    check_vulnerabilities::{load_cve_db, collect_cpes},
-    scan_binary_vulnerabilities, BinaryAnalysis
+use nabla_cli::binary::{
+    BinaryAnalysis,
+    check_vulnerabilities::{collect_cpes, load_cve_db},
+    scan_binary_vulnerabilities,
 };
 use serde_json::json;
 
@@ -56,4 +57,4 @@ fn test_scan_binary_vulnerabilities() {
     let matches = scan_binary_vulnerabilities(&analysis);
     // We can't guarantee OpenSSL is present, but the function should run without error.
     assert!(matches.len() >= 0); // This is always true, but kept for clarity
-} 
+}
