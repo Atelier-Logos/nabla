@@ -7,7 +7,6 @@ use axum::{
 use base64::Engine;
 use dotenvy::dotenv;
 use reqwest::Client; // Add import for Client
-use sqlx::PgPool;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

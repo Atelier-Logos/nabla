@@ -21,7 +21,6 @@ pub struct AppState {
     pub license_jwt_secret: Arc<[u8; 32]>,
     pub crypto_provider: enterprise::crypto::CryptoProvider,
     pub inference_manager: Arc<enterprise::providers::InferenceManager>, // add this
-    pub db: Option<sqlx::PgPool>,                                        // add this
 }
 
 // For binary crate main.rs we still have its own AppState; To avoid duplication, we
@@ -40,7 +39,6 @@ pub mod server {
         };
         use base64::Engine;
         use dotenvy::dotenv;
-        use sqlx::PgPool;
         use std::sync::Arc;
         use tower_http::cors::{Any, CorsLayer};
         use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

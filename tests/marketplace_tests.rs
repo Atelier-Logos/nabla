@@ -4,7 +4,6 @@ use axum::{
     http::{Request, StatusCode},
 };
 use serde_json::json;
-use sqlx::PgPool;
 use tower::ServiceExt;
 
 use nabla::enterprise::cloud::{MarketplaceState, marketplace_routes};
