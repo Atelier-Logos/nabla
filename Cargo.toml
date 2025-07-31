@@ -1,5 +1,5 @@
 [package]
-name = "nabla"
+name = "nabla-core"
 version = "0.1.0"
 edition = "2024"
 description = "An OSS SAST/SCA API for calculating your SSCS gradients"
