@@ -6,9 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(feature = "private")]
-use doppler_rs::{apis::client::Client, apis::Error as DopplerError};
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtData {
     pub token: String,
@@ -121,40 +118,63 @@ impl JwtStore {
     }
 
     fn get_license_signing_key(&self) -> Result<String> {
-        // Determine deployment type
+        // Try environment variable first (fastest)
+        if let Ok(key) = std::env::var("LICENSE_SIGNING_KEY") {
+            return Ok(key);
+        }
+        
+        // Try Doppler API via HTTP for both OSS and Private deployments
+        if let (Ok(project), Ok(config_name)) = (
+            std::env::var("DOPPLER_PROJECT"),
+            std::env::var("DOPPLER_CONFIG")
+        ) {
+            // Try deployment-specific token first, then fall back to general token
+            let doppler_token = if config_name.contains("prd") {
+                std::env::var("DOPPLER_TOKEN_PRD")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else if config_name.contains("oss") {
+                std::env::var("DOPPLER_TOKEN_OSS")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else {
+                std::env::var("DOPPLER_TOKEN")
+            };
+            
+            if let Ok(token) = doppler_token {
+                // Use ureq for sync HTTP requests (no runtime conflicts)
+                let url = format!("https://api.doppler.com/v3/configs/config/secret?project={}&config={}&name=LICENSE_SIGNING_KEY", 
+                    project, config_name);
+                
+                if let Ok(response) = ureq::get(&url)
+                    .set("Authorization", &format!("Bearer {}", token))
+                    .call() 
+                {
+                    if let Ok(json) = response.into_json::<serde_json::Value>() {
+                        if let Some(value) = json.get("value")
+                            .and_then(|v| v.get("computed"))
+                            .and_then(|c| c.as_str()) 
+                        {
+                            return Ok(value.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Final fallback based on deployment type
         let deployment_type = std::env::var("NABLA_DEPLOYMENT")
             .unwrap_or_else(|_| "oss".to_string());
 
         match deployment_type.to_lowercase().as_str() {
             "oss" => {
-                // Use default OSS key
+                // Hardcoded public key for OSS deployments as last resort
                 Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
             }
             "private" => {
-                #[cfg(feature = "private")]
-                {
-                    // Try Doppler first for private deployments
-                    if let (Ok(project), Ok(config_name)) = (
-                        std::env::var("DOPPLER_PROJECT"),
-                        std::env::var("DOPPLER_CONFIG")
-                    ) {
-                        if let Ok(doppler_token) = std::env::var("DOPPLER_TOKEN") {
-                            let client = Client::new(&doppler_token);
-                            if let Ok(secret) = client.get_secret(&project, &config_name, "LICENSE_SIGNING_KEY") {
-                                return Ok(secret.value);
-                            }
-                        }
-                    }
-                }
-                
-                // Fallback to environment variable
-                std::env::var("LICENSE_SIGNING_KEY")
-                    .map_err(|_| anyhow!("LICENSE_SIGNING_KEY environment variable is required for JWT verification"))
+                Err(anyhow!("LICENSE_SIGNING_KEY required for private deployment (try Doppler CLI or env var)"))
             }
             _ => {
-                // Invalid deployment type, fallback to environment variable
-                std::env::var("LICENSE_SIGNING_KEY")
-                    .map_err(|_| anyhow!("LICENSE_SIGNING_KEY environment variable is required for JWT verification"))
+                // Invalid deployment type, try OSS fallback
+                Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
             }
         }
     }

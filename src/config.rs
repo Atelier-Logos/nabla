@@ -1,9 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-#[cfg(feature = "private")]
-use doppler_rs::{apis::client::Client, apis::Error as DopplerError};
-
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum DeploymentType {
     OSS,
@@ -77,31 +74,63 @@ impl Config {
     }
 
     fn get_license_signing_key(deployment_type: &DeploymentType) -> Result<String> {
+        // Try environment variable first (fastest)
+        if let Ok(key) = std::env::var("LICENSE_SIGNING_KEY") {
+            return Ok(key);
+        }
+        
+        // Try Doppler API via HTTP for both OSS and Private deployments
+        if let (Ok(project), Ok(config_name)) = (
+            std::env::var("DOPPLER_PROJECT"),
+            std::env::var("DOPPLER_CONFIG")
+        ) {
+            // Try deployment-specific token first, then fall back to general token
+            let doppler_token = if config_name.contains("prd") {
+                std::env::var("DOPPLER_TOKEN_PRD")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else if config_name.contains("oss") {
+                std::env::var("DOPPLER_TOKEN_OSS")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else {
+                std::env::var("DOPPLER_TOKEN")
+            };
+            
+            if let Ok(token) = doppler_token {
+                
+                // Use ureq for sync HTTP requests (no runtime conflicts)
+                let url = format!("https://api.doppler.com/v3/configs/config/secret?project={}&config={}&name=LICENSE_SIGNING_KEY", 
+                    project, config_name);
+                
+                match ureq::get(&url)
+                    .set("Authorization", &format!("Bearer {}", token))
+                    .call() 
+            {
+                Ok(response) => {
+                    match response.into_json::<serde_json::Value>() {
+                        Ok(json) => {
+                            if let Some(value) = json.get("value")
+                                .and_then(|v| v.get("computed"))
+                                .and_then(|c| c.as_str()) 
+                            {
+                                return Ok(value.to_string());
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+                Err(_) => {}
+            }
+            }
+        }
+        
+        // Final fallback based on deployment type
         match deployment_type {
             DeploymentType::OSS => {
-                // Public key for OSS deployments
+                // Hardcoded public key for OSS deployments as last resort
                 Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
             }
             DeploymentType::Private => {
-                #[cfg(feature = "private")]
-                {
-                    // Try Doppler first for private deployments
-                    if let (Ok(project), Ok(config_name)) = (
-                        std::env::var("DOPPLER_PROJECT"),
-                        std::env::var("DOPPLER_CONFIG")
-                    ) {
-                        if let Ok(doppler_token) = std::env::var("DOPPLER_TOKEN") {
-                            let client = Client::new(&doppler_token);
-                            if let Ok(secret) = client.get_secret(&project, &config_name, "LICENSE_SIGNING_KEY") {
-                                return Ok(secret.value);
-                            }
-                        }
-                    }
-                }
-                
-                // Fallback to environment variable
-                std::env::var("LICENSE_SIGNING_KEY")
-                    .map_err(|_| anyhow::anyhow!("LICENSE_SIGNING_KEY env missing for private deployment"))
+                Err(anyhow::anyhow!("LICENSE_SIGNING_KEY required for private deployment (try Doppler or env var)"))
             }
         }
     }
