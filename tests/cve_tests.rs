@@ -1,6 +1,6 @@
 // tests/cve_tests.rs
 
-use nabla::binary::{
+use nabla_cli::binary::{
     BinaryAnalysis,
     check_vulnerabilities::{collect_cpes, load_cve_db},
     scan_binary_vulnerabilities,

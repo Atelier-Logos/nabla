@@ -1,6 +1,6 @@
 // tests/fips_tls_tests.rs
 
-use nabla::enterprise::crypto::CryptoProvider;
+use nabla_cli::enterprise::crypto::CryptoProvider;
 // Removed unused imports
 
 #[test]

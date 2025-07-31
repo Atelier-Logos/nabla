@@ -1,6 +1,6 @@
 [package]
 name = "nabla-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "An OSS SAST/SCA API for calculating your SSCS gradients"
 keywords = ["security", "binary-analysis", "cli", "sbom", "vulnerability"]
