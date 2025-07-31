@@ -20,7 +20,7 @@ include = [
 default = ["oss"]
 oss = []
 cloud = ["webbrowser", "tiny_http", "urlencoding"]
-private = []
+private = ["doppler-rs"]
 
 [dependencies]
 # Web server framework
@@ -135,6 +135,9 @@ fuzzy-matcher = "0.3"
 webbrowser = { version = "1.0", optional = true }
 tiny_http = { version = "0.12", optional = true }
 urlencoding = { version = "2.1", optional = true }
+
+# Doppler secrets management for private deployments
+doppler-rs = { version = "0.0.2", optional = true }
 
 [[bin]]
 name = "nabla"

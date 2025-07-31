@@ -24,6 +24,14 @@
             submodules: recursive
             token: ${{ secrets.PAT_TOKEN }}
 
+        - name: Install Doppler CLI
+          uses: dopplerhq/cli-action@v3
+
+        - name: Set up environment variables with Doppler
+          run: doppler secrets download --no-file --format=env >> $GITHUB_ENV
+          env:
+            DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
         - name: Configure AWS credentials
           uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df # v4.2.1
           with:
@@ -49,12 +57,11 @@
             ECR_REPOSITORY: ${{ secrets.REPO_NAME }}
             IMAGE_TAG: ${{ steps.get-commit-hash.outputs.commit-hash }}-${{ steps.get-timestamp.outputs.timestamp }}
             PORT: ${{ secrets.PORT }}
-            LICENSE_SIGNING_KEY: ${{ secrets.LICENSE_SIGNING_KEY }}
+            LICENSE_SIGNING_KEY: ${{ env.LICENSE_SIGNING_KEY }}
           run: |
             # Build and tag both with unique tag and 'latest'
             docker build \
-            --build-arg DATABASE_URL=${{ secrets.DATABASE_URL }} \
-            --build-arg LICENSE_SIGNING_KEY=${{ secrets.LICENSE_SIGNING_KEY }} \
+            --build-arg LICENSE_SIGNING_KEY=${{ env.LICENSE_SIGNING_KEY }} \
             --build-arg FIPS_MODE=true \
             --build-arg FIPS_VALIDATION=true \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \

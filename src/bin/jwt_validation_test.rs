@@ -3,6 +3,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use clap::Parser;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, errors::ErrorKind};
 use serde::Deserialize;
+use nabla_core::config::Config;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -25,12 +26,27 @@ struct Args {
 #[allow(dead_code)]
 struct Claims {
     sub: String,
+    uid: String,
     exp: usize,
     iat: usize,
     jti: String,
-    plan: String,
-    rate_limit: u32,
-    deployment_id: Option<String>,
+    rate_limit: i32,
+    deployment_id: String,
+    features: PlanFeatures,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct PlanFeatures {
+    chat_enabled: bool,
+    api_access: bool,
+    file_upload_limit_mb: u32,
+    concurrent_requests: u32,
+    custom_models: bool,
+    sbom_generation: bool,
+    vulnerability_scanning: bool,
+    signed_attestation: bool,
+    monthly_binaries: u32,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -38,7 +54,12 @@ fn main() -> anyhow::Result<()> {
 
     let secret_base64 = args
         .secret
-        .unwrap_or_else(|| "ZwXQPW2lbCC74DYLgjFwnHaqsakReigw4Jvu5CHeRoU".to_string());
+        .unwrap_or_else(|| {
+            // Use config system to get consistent key
+            Config::from_env()
+                .expect("Failed to load config")
+                .license_signing_key
+        });
 
     let decoded = URL_SAFE_NO_PAD
         .decode(&secret_base64)

@@ -1129,6 +1129,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "doppler-rs"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4308ef5688a34622d51e9d51ce19020438502761418c6e0f725ee47189a43bee"
+dependencies = [
+ "chrono",
+ "reqwest 0.12.22",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "url",
+]
+
+[[package]]
 name = "dotenvy"
 version = "0.15.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2488,6 +2503,7 @@ dependencies = [
  "chrono",
  "clap",
  "dashmap",
+ "doppler-rs",
  "dotenvy",
  "ed25519-dalek",
  "entropy",

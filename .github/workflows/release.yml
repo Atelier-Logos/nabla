@@ -18,6 +18,14 @@ jobs:
         with:
           submodules: true
 
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Set up environment variables with Doppler
+        run: doppler secrets download --no-file --format=env >> $GITHUB_ENV
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
