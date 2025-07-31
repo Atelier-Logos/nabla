@@ -1,6 +1,6 @@
 // tests/metadata_extractor_tests.rs
 
-use nabla::binary::metadata_extractor::{
+use nabla_cli::binary::metadata_extractor::{
     calculate_license_confidence, calculate_version_confidence, extract_company_name,
     extract_product_name, infer_license_from_text, is_valid_version, normalize_license_name,
 };

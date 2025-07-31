@@ -1,4 +1,4 @@
-use nabla::enterprise::crypto::CryptoProvider;
+use nabla_cli::enterprise::crypto::CryptoProvider;
 
 #[test]
 fn test_fips_initialization() {

@@ -1,4 +1,4 @@
-use nabla_core::config::{Config, DeploymentType};
+use nabla_cli::config::{Config, DeploymentType};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Testing Deployment Modes");

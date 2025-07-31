@@ -1,4 +1,4 @@
-use nabla::ssrf_protection::{SSRFConfig, SSRFValidator};
+use nabla_cli::ssrf_protection::{SSRFConfig, SSRFValidator};
 
 #[test]
 fn test_whitelisted_domains() {

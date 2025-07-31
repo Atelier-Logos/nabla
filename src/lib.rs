@@ -46,17 +46,8 @@ pub mod server {
         dotenv().ok();
         let config = crate::Config::from_env()?;
 
-        // Decide license signing key based on deployment type
-        let key_b64 = match config.deployment_type {
-            crate::config::DeploymentType::OSS => {
-                // Safe default key for OSS - public and non-secret
-                "t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string()
-            }
-            crate::config::DeploymentType::Cloud | crate::config::DeploymentType::Private => {
-                std::env::var("LICENSE_SIGNING_KEY")
-                    .expect("LICENSE_SIGNING_KEY env missing for cloud/private deployment")
-            }
-        };
+        // Use consistent key loading from config
+        let key_b64 = config.license_signing_key.clone();
 
         let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
         let secret_array: [u8; 32] = decoded
@@ -78,10 +69,6 @@ pub mod server {
 
         let inference_manager = Arc::new(InferenceManager::new());
 
-        let db = match &config.database_url {
-            Some(url) if !url.is_empty() => Some(PgPool::connect(url).await?),
-            _ => None,
-        };
 
         let crypto_provider = crate::enterprise::crypto::CryptoProvider::new(
             config.fips_mode,
@@ -95,7 +82,6 @@ pub mod server {
             license_jwt_secret,
             crypto_provider,
             inference_manager,
-            db,
         };
 
         let cors = CorsLayer::new()

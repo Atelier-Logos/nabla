@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use base64::{Engine as _, engine::general_purpose};
 use home::home_dir;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
@@ -85,13 +86,14 @@ impl JwtStore {
     }
 
     pub fn verify_and_store_jwt(&self, jwt_token: &str) -> Result<JwtData> {
-        // TODO: Replace with your actual signing key - this should be the same key used in your backend
-        // For now using a placeholder - you'll need to set this to your actual signing key
-        let signing_key = std::env::var("NABLA_JWT_SECRET").map_err(|_| {
-            anyhow!("NABLA_JWT_SECRET environment variable is required for JWT verification")
-        })?;
+        // Get signing key using the same logic as config.rs
+        let signing_key_b64 = self.get_license_signing_key()?;
 
-        let key = DecodingKey::from_secret(signing_key.as_ref());
+        // Decode the base64 key like the minting tool does
+        let key_bytes = general_purpose::URL_SAFE_NO_PAD.decode(signing_key_b64.trim())
+            .map_err(|e| anyhow!("Failed to decode LICENSE_SIGNING_KEY as base64: {}", e))?;
+
+        let key = DecodingKey::from_secret(&key_bytes);
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
@@ -113,5 +115,67 @@ impl JwtStore {
         self.save_jwt(&jwt_data)?;
 
         Ok(jwt_data)
+    }
+
+    fn get_license_signing_key(&self) -> Result<String> {
+        // Try environment variable first (fastest)
+        if let Ok(key) = std::env::var("LICENSE_SIGNING_KEY") {
+            return Ok(key);
+        }
+        
+        // Try Doppler API via HTTP for both OSS and Private deployments
+        if let (Ok(project), Ok(config_name)) = (
+            std::env::var("DOPPLER_PROJECT"),
+            std::env::var("DOPPLER_CONFIG")
+        ) {
+            // Try deployment-specific token first, then fall back to general token
+            let doppler_token = if config_name.contains("prd") {
+                std::env::var("DOPPLER_TOKEN_PRD")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else if config_name.contains("oss") {
+                std::env::var("DOPPLER_TOKEN_OSS")
+                    .or_else(|_| std::env::var("DOPPLER_TOKEN"))
+            } else {
+                std::env::var("DOPPLER_TOKEN")
+            };
+            
+            if let Ok(token) = doppler_token {
+                // Use ureq for sync HTTP requests (no runtime conflicts)
+                let url = format!("https://api.doppler.com/v3/configs/config/secret?project={}&config={}&name=LICENSE_SIGNING_KEY", 
+                    project, config_name);
+                
+                if let Ok(response) = ureq::get(&url)
+                    .set("Authorization", &format!("Bearer {}", token))
+                    .call() 
+                {
+                    if let Ok(json) = response.into_json::<serde_json::Value>() {
+                        if let Some(value) = json.get("value")
+                            .and_then(|v| v.get("computed"))
+                            .and_then(|c| c.as_str()) 
+                        {
+                            return Ok(value.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Final fallback based on deployment type
+        let deployment_type = std::env::var("NABLA_DEPLOYMENT")
+            .unwrap_or_else(|_| "oss".to_string());
+
+        match deployment_type.to_lowercase().as_str() {
+            "oss" => {
+                // Hardcoded public key for OSS deployments as last resort
+                Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
+            }
+            "private" => {
+                Err(anyhow!("LICENSE_SIGNING_KEY required for private deployment (try Doppler CLI or env var)"))
+            }
+            _ => {
+                // Invalid deployment type, try OSS fallback
+                Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
+            }
+        }
     }
 }

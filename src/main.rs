@@ -39,7 +39,6 @@ pub struct AppState {
     pub license_jwt_secret: Arc<[u8; 32]>,
     pub crypto_provider: enterprise::crypto::CryptoProvider,
     pub inference_manager: Arc<InferenceManager>,
-    pub db: Option<PgPool>,
 }
 
 pub async fn run_server(port: u16) -> anyhow::Result<()> {
@@ -49,17 +48,8 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     // Load config to check deployment type
     let config = Config::from_env()?;
 
-    // Only require LICENSE_SIGNING_KEY for cloud and private deployments
-    let key_b64 = match config.deployment_type {
-        config::DeploymentType::OSS => {
-            // Safe default key for OSS - public and non-secret
-            "t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string()
-        }
-        config::DeploymentType::Cloud | config::DeploymentType::Private => {
-            std::env::var("LICENSE_SIGNING_KEY")
-                .expect("LICENSE_SIGNING_KEY env missing for cloud/private deployment")
-        }
-    };
+    // Use consistent key loading from config
+    let key_b64 = config.license_signing_key.clone();
 
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
     // Ensure length is exactly 32, then convert Vec<u8> to [u8; 32]
@@ -81,15 +71,6 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     // Load configuration
     let config = Config::from_env()?;
 
-    // Initialize database connection if DATABASE_URL is provided
-    let db = if let Some(database_url) = &config.database_url {
-        let pool = PgPool::connect(database_url).await?;
-        tracing::info!("Database connection established");
-        Some(pool)
-    } else {
-        tracing::info!("No DATABASE_URL provided, marketplace features disabled");
-        None
-    };
 
     // Initialize crypto provider with FIPS configuration
     let mut crypto_provider =
@@ -146,7 +127,6 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         license_jwt_secret,
         crypto_provider,
         inference_manager,
-        db,
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);

@@ -1,3 +1,5 @@
 fly.toml
 # Ignore build artifacts so the Docker build context stays small
 /target/
+utilities/
+test_binaries/

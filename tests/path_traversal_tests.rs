@@ -3,7 +3,7 @@ use tempfile::tempdir;
 use tokio::fs;
 
 // Import the function we want to test
-use nabla::routes::binary::validate_file_path;
+use nabla_cli::routes::binary::validate_file_path;
 
 #[tokio::test]
 async fn test_path_traversal_protection() {

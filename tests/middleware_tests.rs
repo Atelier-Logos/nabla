@@ -6,7 +6,7 @@ use axum::{
     http::{Request, StatusCode},
     routing::post,
 };
-use nabla::{AppState, Config, middleware::validate_license_jwt};
+use nabla_cli::{AppState, Config, middleware::validate_license_jwt};
 use std::sync::Arc;
 use tower::ServiceExt;
 

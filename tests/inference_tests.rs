@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono;
-use nabla::binary::BinaryAnalysis;
-use nabla::enterprise::providers::{
+use nabla_cli::binary::BinaryAnalysis;
+use nabla_cli::enterprise::providers::{
     GenerationOptions, GenerationResponse, HTTPProvider, InferenceError, InferenceProvider,
 };
 use serde_json::json;
