@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use nabla::cli::{NablaCli, Commands};
+use nabla_core::cli::{NablaCli, Commands};
 
 #[derive(Parser)]
 #[command(name = "nabla")]

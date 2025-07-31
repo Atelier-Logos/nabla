@@ -16,11 +16,17 @@ mod config;
 mod routes;
 mod middleware;
 mod binary;
+mod cli;
+mod ssrf_protection;
 // mod providers; // Using enterprise providers instead
 mod enterprise;
 
+// Re-export server module so CLI can access it
+pub mod server {
+    pub use crate::run_server;
+}
+
 use enterprise::providers::InferenceManager;
-use enterprise::cloud::{marketplace_routes, MarketplaceState};
 
 use config::Config;
 use middleware::validate_license_jwt;
@@ -155,27 +161,11 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         .route("/binary/chat", post(routes::chat_with_binary))
         .route_layer(auth_layer);
 
-    // Marketplace routes (if database is available)
-    let marketplace_routes = if let Some(db_pool) = &state.db {
-        let marketplace_state = MarketplaceState {
-            db: db_pool.clone(),
-            jwt_secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| "your-jwt-secret".to_string()),
-            aws_entitlement_url: config.aws_entitlement_url.clone().unwrap_or_else(|| "https://entitlement.marketplace.us-east-1.amazonaws.com".to_string()),
-            aws_access_key: config.aws_access_key.clone().unwrap_or_default(),
-            aws_secret_key: config.aws_secret_key.clone().unwrap_or_default(),
-            aws_region: config.aws_region.clone().unwrap_or_else(|| "us-east-1".to_string()),
-        };
-        
-        marketplace_routes().with_state(marketplace_state)
-    } else {
-        Router::new()
-    };
 
     // Build the main app router
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
-        .merge(marketplace_routes)
         .layer(cors)
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .with_state(state);
@@ -184,11 +174,6 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     
     tracing::info!("Server starting on port {}", port);
     tracing::info!("FIPS mode: {}, FIPS validation: {}", config.fips_mode, config.fips_validation);
-    if state.db.is_some() {
-        tracing::info!("Marketplace features enabled");
-    } else {
-        tracing::info!("Marketplace features disabled (no DATABASE_URL)");
-    }
     
     axum::serve(listener, app).await?;
 
@@ -233,8 +218,8 @@ async fn main() -> anyhow::Result<()> {
         }
         None => {
             // Show help when no command is provided
-            let mut nabla_cli = NablaCli::new()?;
-            nabla_cli.show_intro_and_help()
+            let nabla_cli = NablaCli::new()?;
+            nabla_cli.show_intro_and_help().await
         }
     }
 }

@@ -14,10 +14,6 @@ pub struct SSRFConfig {
     pub allow_localhost: bool,
     /// Whether to allow private IPs
     pub allow_private_ips: bool,
-    /// Whether to follow redirects
-    pub follow_redirects: bool,
-    /// Maximum redirects to follow
-    pub max_redirects: usize,
 }
 
 impl Default for SSRFConfig {
@@ -55,8 +51,6 @@ impl Default for SSRFConfig {
             whitelisted_ips,
             allow_localhost: true,
             allow_private_ips: false,
-            follow_redirects: false,
-            max_redirects: 0,
         }
     }
 }
@@ -76,9 +70,6 @@ impl SSRFValidator {
     }
     
     /// Create a new SSRF validator with custom configuration
-    pub fn with_config(config: SSRFConfig) -> Self {
-        Self { config }
-    }
     
     /// Validate a URL for SSRF protection
     pub fn validate_url(&self, url_str: &str) -> Result<Url, anyhow::Error> {
@@ -314,35 +305,6 @@ impl SSRFValidator {
         }
     }
     
-    /// Get the SSRF configuration
-    pub fn config(&self) -> &SSRFConfig {
-        &self.config
-    }
-    
-    /// Update the SSRF configuration
-    pub fn update_config(&mut self, config: SSRFConfig) {
-        self.config = config;
-    }
-    
-    /// Add a domain to the whitelist
-    pub fn add_whitelisted_domain(&mut self, domain: String) {
-        self.config.whitelisted_domains.insert(domain);
-    }
-    
-    /// Remove a domain from the whitelist
-    pub fn remove_whitelisted_domain(&mut self, domain: &str) {
-        self.config.whitelisted_domains.remove(domain);
-    }
-    
-    /// Add an IP range to the whitelist
-    pub fn add_whitelisted_ip(&mut self, ip_range: String) {
-        self.config.whitelisted_ips.insert(ip_range);
-    }
-    
-    /// Remove an IP range from the whitelist
-    pub fn remove_whitelisted_ip(&mut self, ip_range: &str) {
-        self.config.whitelisted_ips.remove(ip_range);
-    }
 }
 
 #[cfg(test)]

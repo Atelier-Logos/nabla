@@ -84,9 +84,6 @@ impl JwtStore {
         Ok(())
     }
 
-    pub fn is_authenticated(&self) -> bool {
-        self.load_jwt().unwrap_or(None).is_some()
-    }
     
     pub fn verify_and_store_jwt(&self, jwt_token: &str) -> Result<JwtData> {
         // TODO: Replace with your actual signing key - this should be the same key used in your backend

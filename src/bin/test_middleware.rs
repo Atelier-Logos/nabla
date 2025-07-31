@@ -1,4 +1,4 @@
-use nabla::middleware::{Claims, PlanFeatures};
+use nabla_core::middleware::{Claims, PlanFeatures};
 use jsonwebtoken::{encode, decode, Header, EncodingKey, DecodingKey, Validation, Algorithm};
 use std::time::{SystemTime, UNIX_EPOCH};
 

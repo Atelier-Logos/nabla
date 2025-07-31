@@ -1,24 +1,9 @@
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use std::fs;
-use std::collections::HashMap;
 use clap::Subcommand;
 use home;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigData {
-    pub base_url: Option<String>,
-    pub settings: HashMap<String, String>,
-}
-
-impl Default for ConfigData {
-    fn default() -> Self {
-        Self {
-            base_url: None,
-            settings: HashMap::new(),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ConfigStore {
@@ -95,16 +80,6 @@ impl ConfigStore {
         Ok(())
     }
 
-    pub fn load_config(&self) -> Result<ConfigData> {
-        let config_path = Self::get_config_path()?;
-        if config_path.exists() {
-            let content = fs::read_to_string(&config_path)?;
-            let config: ConfigData = serde_json::from_str(&content).unwrap_or_default();
-            Ok(config)
-        } else {
-            Ok(ConfigData::default())
-        }
-    }
 }
 
 #[derive(Subcommand)]

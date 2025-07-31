@@ -8,7 +8,7 @@ mod auth;
 mod config;
 mod jwt_store;
 
-pub use auth::{AuthArgs, AuthCommands};
+pub use auth::AuthArgs;
 pub use config::{ConfigCommands, ConfigStore};
 pub use jwt_store::*;
 use crate::ssrf_protection::SSRFValidator;
