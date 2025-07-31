@@ -100,8 +100,6 @@ quote = "1.0"
 # Additional dependencies for which crate
 which = "8.0"
 
-# Sigstore for proper attestation signing
-sigstore = { version = "0.12", features = ["cosign", "sign", "verify"] }
 
 # For resolving the home directory
 home = "0.5"

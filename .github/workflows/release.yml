@@ -14,12 +14,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: true
 
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
+        uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1 # v3
 
       - name: Set up environment variables with Doppler
         run: doppler secrets download --no-file --format=env >> $GITHUB_ENV
@@ -27,10 +27,10 @@ jobs:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b3b07ba9632e1aaf8bd606e0fc4dcb1a1d6b1fb8 # stable
 
       - name: Cache cargo registry and target
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84b2de45f5dcd1aee3bb4f4ff5ba392aeac # v4.2.3
         with:
           path: |
             ~/.cargo/registry
