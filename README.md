@@ -6,13 +6,6 @@
 
 <br/>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-<div align="center">
-
-<img src="https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true" alt="Nabla banner" />
-
-<br/>
-
 <!-- Badges -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](https://opensource.org/licenses/MIT)
 ![Crates.io Version](https://img.shields.io/crates/v/nabla-cli)
@@ -20,7 +13,6 @@
 ![OSSF-Scorecard Score](https://img.shields.io/ossf-scorecard/github.com/Atelier-Logos/nabla)
 ![Crates.io Total Downloads](https://img.shields.io/crates/d/nabla-cli)
 [![Discord](https://img.shields.io/discord/123456789012345678?label=chat&logo=discord&color=7289DA)](https://discord.gg/YOUR_INVITE_CODE)
-
 
 
 <h1>Nabla – An OSS SAST/SCA API for calculating your SSCS gradients</h1>
