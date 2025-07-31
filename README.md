@@ -51,6 +51,13 @@ Nabla acts like a firewall for your binary inputs — providing deep binary anal
 - **✍️ Attestation**: Sigstore-compatible predicate output ready for signing
 - **⛓️‍💥 Diffing**: Compare two binaries and view differences in content and structure
 - **⚙️ REST API**: JSON-first API built on Axum, ready for CI/CD pipelines
+- **🤖 LLM Powered Binary Insights**: Want to chat with your binary analysis? We can do that. 
+
+## Need enterprise support or features?
+
+Schedule a call to chat with us to get a license for out proprietary features today
+
+<a href="https://cal.com/team/atelier-logos/nabla-intro"><img src="https://cal.com/book-with-cal-dark.svg" alt="Book us with Cal.com"></a>
 
 ## 🔌 CLI Commands
 
@@ -238,9 +245,15 @@ Run locally:
 cargo run
 ```
 
-## FIPS 140-2 Compliance
+## Security and compliance
 
-Nabla supports FIPS 140-3 compliance mode for enterprise deployments:
+We take security seriously and are always keep a sharp eye on our product for exploitable vulnerabilies and service affecting issues. We offer FIPS mode for our enterprise customers and are working on other compliance certifications as we speak. 
+
+We also secure all of our repos with cloud-based end-to-end security using Aikido:
+
+<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank">
+    <img src="https://app.aikido.dev/assets/badges/full-light-theme.svg" alt="Aikido Security Audit Report" height="40" />    
+</a>
 
 ### FIPS Mode Features
 - **FIPS 140-3 Approved Algorithms**: SHA-256, SHA-512, HMAC-SHA256, AES-256-GCM
