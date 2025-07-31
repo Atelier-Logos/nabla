@@ -247,10 +247,9 @@ We take security seriously and are always keep a sharp eye on our product for ex
 
 We also secure all of our repos with cloud-based end-to-end security using Aikido:
 
-<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank" style="display: inline-block; background: white; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; text-decoration: none;">
-    <img src="https://app.aikido.dev/assets/badges/full-light-theme.svg" alt="Aikido Security Audit Report" height="40" style="vertical-align: middle;" />
+<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank">
+    <img src="https://app.aikido.dev/assets/badges/full-light-theme.svg" alt="Aikido Security Audit Report" height="40" />    
 </a>
-
 
 ### FIPS Mode Features
 - **FIPS 140-3 Approved Algorithms**: SHA-256, SHA-512, HMAC-SHA256, AES-256-GCM
