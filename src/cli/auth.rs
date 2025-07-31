@@ -1,11 +1,11 @@
+use crate::cli::{JwtData, NablaCli};
 use anyhow::Result;
-use crate::cli::{NablaCli, JwtData};
 
 #[derive(clap::Args)]
 pub struct AuthArgs {
     #[command(subcommand)]
     pub command: Option<AuthCommands>,
-    
+
     /// Set JWT token for authentication
     #[arg(long = "set-jwt")]
     pub set_jwt: Option<String>,
@@ -23,7 +23,7 @@ impl NablaCli {
         if let Some(jwt_token) = args.set_jwt {
             return self.handle_set_jwt(jwt_token);
         }
-        
+
         // Handle subcommands
         match args.command {
             Some(AuthCommands::Upgrade) => self.handle_auth_upgrade(),
@@ -34,7 +34,7 @@ impl NablaCli {
             }
         }
     }
-    
+
     fn handle_set_jwt(&mut self, jwt_token: String) -> Result<()> {
         // Verify JWT against your signing key before storing
         match self.jwt_store.verify_and_store_jwt(&jwt_token) {
@@ -42,7 +42,7 @@ impl NablaCli {
                 println!("✅ JWT token verified and set successfully!");
                 println!("User ID: {}", jwt_data.sub);
                 println!("Deployment ID: {}", jwt_data.deployment_id);
-                
+
                 // Show available features based on JWT claims
                 println!("🎯 Enabled Features:");
                 if jwt_data.features.chat_enabled {
@@ -60,7 +60,7 @@ impl NablaCli {
                 if jwt_data.features.custom_models {
                     println!("  • Custom Models");
                 }
-                
+
                 self.show_portal_link(&jwt_data)?;
             }
             Err(e) => {
@@ -89,9 +89,9 @@ impl NablaCli {
         println!("  • Configure integrations and deployment options");
         println!("  • Provide dedicated support and training");
         println!();
-        
+
         let scheduling_url = "https://cal.com/team/atelier-logos/platform-intro"; // Replace with your actual Calendly link
-        
+
         #[cfg(feature = "cloud")]
         {
             if let Err(e) = webbrowser::open(scheduling_url) {
@@ -102,16 +102,15 @@ impl NablaCli {
                 println!("📅 Schedule your demo at: {}", scheduling_url);
             }
         }
-        
+
         #[cfg(not(feature = "cloud"))]
         {
             println!("📅 Schedule your demo at: {}", scheduling_url);
             println!("💡 Copy and paste this link into your browser to get started.");
         }
-        
+
         Ok(())
     }
-
 
     fn handle_auth_status(&self) -> Result<()> {
         match self.jwt_store.load_jwt()? {
@@ -119,7 +118,7 @@ impl NablaCli {
                 println!("✅ Authenticated!");
                 println!("User ID: {}", jwt_data.sub);
                 println!("Deployment ID: {}", jwt_data.deployment_id);
-                
+
                 // Show available features based on JWT claims
                 println!("🎯 Enabled Features:");
                 if jwt_data.features.chat_enabled {
@@ -140,7 +139,7 @@ impl NablaCli {
                 if jwt_data.features.custom_models {
                     println!("  • Custom Models");
                 }
-                
+
                 self.show_portal_link(&jwt_data)?;
             }
             None => {
@@ -168,8 +167,7 @@ impl NablaCli {
         println!();
         println!("💡 You can also use the CLI to analyze binaries:");
         println!("  nabla analyze /path/to/binary");
-        
+
         Ok(())
     }
-
 }

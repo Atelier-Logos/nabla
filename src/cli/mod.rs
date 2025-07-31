@@ -3,15 +3,73 @@ use clap::Subcommand;
 use reqwest::{Client, multipart};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 mod auth;
 mod config;
 mod jwt_store;
 
+use crate::ssrf_protection::SSRFValidator;
 pub use auth::AuthArgs;
 pub use config::{ConfigCommands, ConfigStore};
 pub use jwt_store::*;
-use crate::ssrf_protection::SSRFValidator;
+
+const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB limit
+
+fn validate_file_path(file_path: &str) -> Result<PathBuf> {
+    // Remove any @ prefix if present
+    let clean_path = if file_path.starts_with('@') {
+        &file_path[1..]
+    } else {
+        file_path
+    };
+
+    let path = Path::new(clean_path);
+
+    // Check if file exists
+    if !path.exists() {
+        return Err(anyhow::anyhow!("File not found: {}", clean_path));
+    }
+
+    // Get canonical path to resolve any .. or . components
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Invalid file path '{}': {}", clean_path, e))?;
+
+    // Get current working directory
+    let current_dir = std::env::current_dir()
+        .map_err(|e| anyhow::anyhow!("Cannot determine current directory: {}", e))?;
+
+    // Ensure the canonical path is within or below the current working directory
+    if !canonical_path.starts_with(&current_dir) {
+        return Err(anyhow::anyhow!(
+            "Access denied: file '{}' is outside the current working directory",
+            clean_path
+        ));
+    }
+
+    // Check file size
+    let metadata = std::fs::metadata(&canonical_path)
+        .map_err(|e| anyhow::anyhow!("Cannot read file metadata: {}", e))?;
+
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(anyhow::anyhow!(
+            "File too large: {} bytes (max: {} bytes)",
+            metadata.len(),
+            MAX_FILE_SIZE
+        ));
+    }
+
+    // Ensure it's a regular file, not a symlink or directory
+    if !metadata.is_file() {
+        return Err(anyhow::anyhow!(
+            "Path must be a regular file: {}",
+            clean_path
+        ));
+    }
+
+    Ok(canonical_path)
+}
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -121,7 +179,8 @@ impl NablaCli {
     }
 
     fn print_ascii_intro(&self) {
-        println!(r#"
+        println!(
+            r#"
     ███╗   ██╗ █████╗ ██████╗ ██╗      █████╗ 
     ████╗  ██║██╔══██╗██╔══██╗██║     ██╔══██╗
     ██╔██╗ ██║███████║██████╔╝██║     ███████║
@@ -130,7 +189,8 @@ impl NablaCli {
     ╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
                                               
     🔒 Binary Analysis & Security Platform
-        "#);
+        "#
+        );
     }
 
     fn print_help(&self) {
@@ -178,24 +238,16 @@ impl NablaCli {
     }
 
     async fn handle_analyze_command(&mut self, file_path: &str) -> Result<()> {
-        let file_path = if file_path.starts_with('@') {
-            &file_path[1..]
-        } else {
-            file_path
-        };
+        let validated_path = validate_file_path(file_path)?;
 
-        println!("🔍 Analyzing binary: {}", file_path);
-
-        if !std::path::Path::new(file_path).exists() {
-            return Err(anyhow::anyhow!("File not found: {}", file_path));
-        }
+        println!("🔍 Analyzing binary: {}", validated_path.display());
 
         let jwt_data = self.jwt_store.load_jwt().ok().flatten();
         let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/analyze", base_url);
 
-        let file_content = std::fs::read(file_path)?;
-        let file_name = std::path::Path::new(file_path)
+        let file_content = std::fs::read(&validated_path)?;
+        let file_name = validated_path
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
@@ -227,25 +279,21 @@ impl NablaCli {
         let jwt_data = self.jwt_store.load_jwt()?
             .ok_or_else(|| anyhow::anyhow!("Authentication required for binary attestation. Run 'nabla auth --set-jwt <token>' or 'nabla upgrade'"))?;
 
-        println!("🔐 Attesting binary: {}", file_path);
+        let validated_file_path = validate_file_path(file_path)?;
+        let validated_key_path = validate_file_path(&signing_key)?;
 
-        if !std::path::Path::new(file_path).exists() {
-            return Err(anyhow::anyhow!("File not found: {}", file_path));
-        }
-        if !std::path::Path::new(&signing_key).exists() {
-            return Err(anyhow::anyhow!("Signing key file not found: {}", signing_key));
-        }
+        println!("🔐 Attesting binary: {}", validated_file_path.display());
 
         let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/attest", base_url);
 
-        let file_content = std::fs::read(file_path)?;
-        let file_name = std::path::Path::new(file_path)
+        let file_content = std::fs::read(&validated_file_path)?;
+        let file_name = validated_file_path
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let signing_key_content = std::fs::read(&signing_key)?;
+        let signing_key_content = std::fs::read(&validated_key_path)?;
 
         println!("🔄 Uploading to attestation endpoint...");
 
@@ -291,27 +339,28 @@ impl NablaCli {
         });
 
         println!("✅ Attestation complete!");
-        println!("Results: {}", serde_json::to_string_pretty(&json!({
-            "analysis": result,
-            "attestation": attestation
-        }))?);
+        println!(
+            "Results: {}",
+            serde_json::to_string_pretty(&json!({
+                "analysis": result,
+                "attestation": attestation
+            }))?
+        );
 
         Ok(())
     }
 
     async fn handle_check_cves_command(&mut self, file_path: &str) -> Result<()> {
+        let validated_path = validate_file_path(file_path)?;
         let jwt_data = self.jwt_store.load_jwt().ok().flatten();
-        println!("🔍 Checking CVEs for: {}", file_path);
 
-        if !std::path::Path::new(file_path).exists() {
-            return Err(anyhow::anyhow!("File not found: {}", file_path));
-        }
+        println!("🔍 Checking CVEs for: {}", validated_path.display());
 
         let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/check-cves", base_url);
 
-        let file_content = std::fs::read(file_path)?;
-        let file_name = std::path::Path::new(file_path)
+        let file_content = std::fs::read(&validated_path)?;
+        let file_name = validated_path
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
@@ -340,27 +389,27 @@ impl NablaCli {
     }
 
     async fn handle_diff_command(&mut self, file1: &str, file2: &str) -> Result<()> {
+        let validated_path1 = validate_file_path(file1)?;
+        let validated_path2 = validate_file_path(file2)?;
         let jwt_data = self.jwt_store.load_jwt().ok().flatten();
-        println!("🔍 Comparing binaries: {} vs {}", file1, file2);
 
-        if !std::path::Path::new(file1).exists() {
-            return Err(anyhow::anyhow!("File not found: {}", file1));
-        }
-        if !std::path::Path::new(file2).exists() {
-            return Err(anyhow::anyhow!("File not found: {}", file2));
-        }
+        println!(
+            "🔍 Comparing binaries: {} vs {}",
+            validated_path1.display(),
+            validated_path2.display()
+        );
 
         let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/diff", base_url);
 
-        let file1_content = std::fs::read(file1)?;
-        let file2_content = std::fs::read(file2)?;
-        let file1_name = std::path::Path::new(file1)
+        let file1_content = std::fs::read(&validated_path1)?;
+        let file2_content = std::fs::read(&validated_path2)?;
+        let file1_name = validated_path1
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let file2_name = std::path::Path::new(file2)
+        let file2_name = validated_path2
             .file_name()
             .unwrap_or_default()
             .to_string_lossy()
@@ -447,7 +496,7 @@ impl NablaCli {
 
     fn show_upgrade_message(&self) {
         let scheduling_url = "https://cal.com/team/atelier-logos/platform-intro";
-        
+
         println!("🚀 Ready to upgrade to Nabla Pro?");
         println!();
         println!("Let's discuss the perfect plan for your security needs:");
@@ -456,7 +505,7 @@ impl NablaCli {
         println!("  • Custom deployment and enterprise integrations");
         println!("  • Dedicated support and training");
         println!();
-        
+
         #[cfg(feature = "cloud")]
         {
             if let Err(e) = webbrowser::open(scheduling_url) {
@@ -467,13 +516,13 @@ impl NablaCli {
                 println!("📅 Schedule your demo: {}", scheduling_url);
             }
         }
-        
+
         #[cfg(not(feature = "cloud"))]
         {
             println!("📅 Schedule your demo: {}", scheduling_url);
             println!("💡 Copy and paste this link into your browser to get started.");
         }
-        
+
         println!();
         println!("After our call, you'll receive a token to get started:");
         println!("  nabla auth --set-jwt <YOUR_TOKEN>");

@@ -1,9 +1,8 @@
 // tests/metadata_extractor_tests.rs
 
 use nabla::binary::metadata_extractor::{
-    is_valid_version, normalize_license_name, infer_license_from_text,
-    extract_company_name, extract_product_name,
-    calculate_version_confidence, calculate_license_confidence,
+    calculate_license_confidence, calculate_version_confidence, extract_company_name,
+    extract_product_name, infer_license_from_text, is_valid_version, normalize_license_name,
 };
 use std::collections::HashSet;
 
@@ -24,11 +23,15 @@ fn test_normalize_license_name() {
 
 #[test]
 fn test_infer_license_from_text() {
-    let mit_text = "Permission is hereby granted, free of charge, to any person obtaining a copy ... MIT";
+    let mit_text =
+        "Permission is hereby granted, free of charge, to any person obtaining a copy ... MIT";
     assert_eq!(infer_license_from_text(mit_text).as_deref(), Some("MIT"));
 
     let apache_text = "Licensed under the Apache License, Version 2.0 (the \"License\")";
-    assert_eq!(infer_license_from_text(apache_text).as_deref(), Some("Apache-2.0"));
+    assert_eq!(
+        infer_license_from_text(apache_text).as_deref(),
+        Some("Apache-2.0")
+    );
 }
 
 #[test]
@@ -50,4 +53,4 @@ fn test_calculate_confidences() {
     let texts = vec!["Permission is hereby granted".to_string()];
     let lc = calculate_license_confidence(&licenses, &spdx, &texts);
     assert!(lc > 0.5);
-} 
+}

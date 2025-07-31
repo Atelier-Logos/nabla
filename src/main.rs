@@ -1,22 +1,22 @@
-use axum::{
-    http::{header, Method},
-    routing::post,
-    Router,
-};
-use tower_http::cors::{Any, CorsLayer};
 use axum::extract::DefaultBodyLimit;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use axum::{
+    Router,
+    http::{Method, header},
+    routing::post,
+};
+use base64::Engine;
 use dotenvy::dotenv;
 use reqwest::Client; // Add import for Client
-use base64::Engine;
-use std::sync::Arc;
 use sqlx::PgPool;
+use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod routes;
-mod middleware;
 mod binary;
 mod cli;
+mod config;
+mod middleware;
+mod routes;
 mod ssrf_protection;
 // mod providers; // Using enterprise providers instead
 mod enterprise;
@@ -46,26 +46,28 @@ pub struct AppState {
 pub async fn run_server(port: u16) -> anyhow::Result<()> {
     // Load environment variables from .env if available
     dotenv().ok();
-    
+
     // Load config to check deployment type
     let config = Config::from_env()?;
-    
+
     // Only require LICENSE_SIGNING_KEY for cloud and private deployments
     let key_b64 = match config.deployment_type {
         config::DeploymentType::OSS => {
             // For OSS, use a default key
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"default-server-key-32-bytes-xx")
-        },
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(b"default-server-key-32-bytes-xx")
+        }
         config::DeploymentType::Cloud | config::DeploymentType::Private => {
-            std::env::var("LICENSE_SIGNING_KEY").expect("LICENSE_SIGNING_KEY env missing for cloud/private deployment")
+            std::env::var("LICENSE_SIGNING_KEY")
+                .expect("LICENSE_SIGNING_KEY env missing for cloud/private deployment")
         }
     };
-    
+
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(key_b64.trim())?;
     // Ensure length is exactly 32, then convert Vec<u8> to [u8; 32]
     let secret_array: [u8; 32] = decoded
-    .try_into()
-    .map_err(|_| anyhow::anyhow!("LICENSE_SIGNING_KEY must be exactly 32 bytes"))?;
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("LICENSE_SIGNING_KEY must be exactly 32 bytes"))?;
 
     // Wrap fixed-size array in Arc
     let license_jwt_secret = Arc::new(secret_array);
@@ -80,7 +82,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
 
     // Load configuration
     let config = Config::from_env()?;
-    
+
     // Initialize database connection if DATABASE_URL is provided
     let db = if let Some(database_url) = &config.database_url {
         let pool = PgPool::connect(database_url).await?;
@@ -90,20 +92,23 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         tracing::info!("No DATABASE_URL provided, marketplace features disabled");
         None
     };
-    
+
     // Initialize crypto provider with FIPS configuration
-    let mut crypto_provider = enterprise::crypto::CryptoProvider::new(config.fips_mode, config.fips_validation)?;
-    
+    let mut crypto_provider =
+        enterprise::crypto::CryptoProvider::new(config.fips_mode, config.fips_validation)?;
+
     // Validate FIPS compliance on startup if enabled
     if config.fips_mode {
         crypto_provider.validate_fips_compliance()?;
         // Note: TLS compliance validation simplified for development
         tracing::info!("TLS compliance validation requested");
-        tracing::info!("FIPS 140-3 mode enabled - using FIPS 140-3 compliant algorithms and enhanced security controls");
+        tracing::info!(
+            "FIPS 140-3 mode enabled - using FIPS 140-3 compliant algorithms and enhanced security controls"
+        );
     } else {
         tracing::info!("Standard mode enabled - using performance-optimized algorithms");
     }
-    
+
     // Initialize license client with SSRF protection
     let client = if config.fips_mode {
         // Use FIPS-compliant HTTP client with redirects disabled
@@ -113,7 +118,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
             .https_only()
             .enable_http1()
             .build();
-        
+
         reqwest::Client::builder()
             .use_rustls_tls()
             .redirect(reqwest::redirect::Policy::none()) // Disable redirects for SSRF protection
@@ -125,7 +130,8 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
             .build()?
     };
 
-    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let base_url =
+        std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     // Configure CORS
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -133,7 +139,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
     // Initialize inference manager
     let inference_manager = Arc::new(InferenceManager::new());
-    
+
     // Build the shared application state
     let state = AppState {
         config: config.clone(),
@@ -151,16 +157,18 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     let public_routes = Router::new()
         .route("/health", axum::routing::get(routes::health_check))
         .route("/debug/multipart", post(routes::debug_multipart));
-    
+
     // Protected routes (with auth)
     let protected_routes = Router::new()
         .route("/binary/analyze", post(routes::upload_and_analyze_binary))
         .route("/binary/diff", post(routes::diff_binaries))
-        .route("/binary/attest", post(enterprise::attestation::attest_binary))
+        .route(
+            "/binary/attest",
+            post(enterprise::attestation::attest_binary),
+        )
         .route("/binary/check-cves", post(routes::check_cve))
         .route("/binary/chat", post(routes::chat_with_binary))
         .route_layer(auth_layer);
-
 
     // Build the main app router
     let app = Router::new()
@@ -171,10 +179,14 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&format!("0.0.0.0:{}", port)).await?;
-    
+
     tracing::info!("Server starting on port {}", port);
-    tracing::info!("FIPS mode: {}, FIPS validation: {}", config.fips_mode, config.fips_validation);
-    
+    tracing::info!(
+        "FIPS mode: {}, FIPS validation: {}",
+        config.fips_mode,
+        config.fips_validation
+    );
+
     axum::serve(listener, app).await?;
 
     Ok(())
@@ -183,8 +195,8 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     use clap::Parser;
-    use cli::{NablaCli, Commands};
-    
+    use cli::{Commands, NablaCli};
+
     // Parse command line arguments
     #[derive(Parser)]
     #[command(name = "nabla")]
@@ -192,24 +204,23 @@ async fn main() -> anyhow::Result<()> {
     struct Cli {
         #[command(subcommand)]
         command: Option<Commands>,
-        
+
         /// Run in server mode (legacy)
         #[arg(long)]
         server: bool,
-        
+
         /// Port for server mode
         #[arg(long, default_value = "8080")]
         port: u16,
     }
-    
+
     let cli = Cli::parse();
-    
-    
+
     // Handle legacy --server flag
     if cli.server {
         return run_server(cli.port).await;
     }
-    
+
     // Handle CLI commands
     match cli.command {
         Some(command) => {

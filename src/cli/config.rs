@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
-use std::fs;
 use clap::Subcommand;
 use home;
-
+use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct ConfigStore {
@@ -28,12 +27,14 @@ impl ConfigStore {
         if let Some(url) = self.get_setting("base_url")? {
             return Ok(url);
         }
-        
+
         if let Ok(url) = std::env::var("NABLA_BASE_URL") {
             return Ok(url);
         }
-        
-        Err(anyhow!("No base URL configured. Set with 'nabla config set-base-url <url>' or NABLA_BASE_URL env var"))
+
+        Err(anyhow!(
+            "No base URL configured. Set with 'nabla config set-base-url <url>' or NABLA_BASE_URL env var"
+        ))
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
@@ -66,8 +67,7 @@ impl ConfigStore {
     }
 
     fn get_config_path() -> Result<std::path::PathBuf> {
-        let home = home::home_dir()
-            .ok_or_else(|| anyhow!("Could not determine home directory"))?;
+        let home = home::home_dir().ok_or_else(|| anyhow!("Could not determine home directory"))?;
         let config_dir = home.join(".nabla");
         fs::create_dir_all(&config_dir)?;
         Ok(config_dir.join("config.json"))
@@ -79,7 +79,6 @@ impl ConfigStore {
         fs::write(&config_path, content)?;
         Ok(())
     }
-
 }
 
 #[derive(Subcommand)]
@@ -89,4 +88,3 @@ pub enum ConfigCommands {
     SetBaseUrl { url: String },
     List,
 }
-

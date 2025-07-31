@@ -1,6 +1,6 @@
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use serde::{Serialize, Deserialize};
 
 use goblin::{elf::Elf, pe::PE};
 use wasmparser::{Parser, Payload};
@@ -91,7 +91,10 @@ pub fn extract_version_info(contents: &[u8], strings: &[String], format: &str) -
     }
 
     if file_version.is_none() && !version_strings.is_empty() {
-        file_version = version_strings.iter().max_by_key(|v| v.matches('.').count()).cloned();
+        file_version = version_strings
+            .iter()
+            .max_by_key(|v| v.matches('.').count())
+            .cloned();
     }
 
     let confidence = calculate_version_confidence(&version_strings, &file_version);
@@ -113,11 +116,23 @@ pub fn extract_license_info(strings: &[String]) -> LicenseInfo {
     let mut license_texts = Vec::new();
 
     let license_patterns = [
-        (Regex::new(r"(?i)\b(MIT|BSD|GPL|LGPL|Apache|Mozilla|ISC|Unlicense)\b").unwrap(), "identifier"),
-        (Regex::new(r"(?i)licensed under the ([^.,;]+)").unwrap(), "phrase"),
-        (Regex::new(r"(?i)license:\s*([^.,;\n]+)").unwrap(), "declaration"),
+        (
+            Regex::new(r"(?i)\b(MIT|BSD|GPL|LGPL|Apache|Mozilla|ISC|Unlicense)\b").unwrap(),
+            "identifier",
+        ),
+        (
+            Regex::new(r"(?i)licensed under the ([^.,;]+)").unwrap(),
+            "phrase",
+        ),
+        (
+            Regex::new(r"(?i)license:\s*([^.,;\n]+)").unwrap(),
+            "declaration",
+        ),
         (Regex::new(r"(?i)copyright\s+.*").unwrap(), "copyright"),
-        (Regex::new(r"SPDX-License-Identifier:\s*([^\s]+)").unwrap(), "spdx"),
+        (
+            Regex::new(r"SPDX-License-Identifier:\s*([^\s]+)").unwrap(),
+            "spdx",
+        ),
     ];
 
     let license_text_patterns = [
@@ -203,7 +218,10 @@ pub fn extract_company_name(string: &str) -> Option<String> {
         Regex::new(r"(?i)company:\s*([^.,;\n]+)").unwrap(),
         Regex::new(r"(?i)corporation:\s*([^.,;\n]+)").unwrap(),
         Regex::new(r"(?i)© \d{4}\s+([^.,;\n]+)").unwrap(),
-        Regex::new(r"(?i)copyright.*?(\w+(?:\s+\w+){0,3})(?:\s+inc\.?|\s+corp\.?|\s+ltd\.?|\s+llc)").unwrap(),
+        Regex::new(
+            r"(?i)copyright.*?(\w+(?:\s+\w+){0,3})(?:\s+inc\.?|\s+corp\.?|\s+ltd\.?|\s+llc)",
+        )
+        .unwrap(),
     ];
 
     for pattern in &patterns {
@@ -268,7 +286,10 @@ pub fn infer_license_from_text(text: &str) -> Option<String> {
     }
 }
 
-pub fn calculate_version_confidence(version_strings: &HashSet<String>, file_version: &Option<String>) -> f64 {
+pub fn calculate_version_confidence(
+    version_strings: &HashSet<String>,
+    file_version: &Option<String>,
+) -> f64 {
     let mut confidence: f64 = 0.0;
     if !version_strings.is_empty() {
         confidence += 0.3;
@@ -284,7 +305,11 @@ pub fn calculate_version_confidence(version_strings: &HashSet<String>, file_vers
     confidence.min(1.0)
 }
 
-pub fn calculate_license_confidence(licenses: &HashSet<String>, spdx: &HashSet<String>, texts: &[String]) -> f64 {
+pub fn calculate_license_confidence(
+    licenses: &HashSet<String>,
+    spdx: &HashSet<String>,
+    texts: &[String],
+) -> f64 {
     let mut confidence: f64 = 0.0;
     if !spdx.is_empty() {
         confidence += 0.5;
@@ -317,24 +342,32 @@ pub fn extract_pe_version_info(contents: &[u8]) -> Option<PeVersionInfo> {
             let windows = &opt_header.windows_fields;
 
             // File version: image version fields (if non-zero)
-            let file_version = if windows.major_image_version != 0 || windows.minor_image_version != 0 {
-                Some(format!("{}.{}", windows.major_image_version, windows.minor_image_version))
-            } else {
-                None
-            };
+            let file_version =
+                if windows.major_image_version != 0 || windows.minor_image_version != 0 {
+                    Some(format!(
+                        "{}.{}",
+                        windows.major_image_version, windows.minor_image_version
+                    ))
+                } else {
+                    None
+                };
 
             // Product version: subsystem version fields (if non-zero)
-            let product_version = if windows.major_subsystem_version != 0 || windows.minor_subsystem_version != 0 {
-                Some(format!("{}.{}", windows.major_subsystem_version, windows.minor_subsystem_version))
-            } else {
-                None
-            };
+            let product_version =
+                if windows.major_subsystem_version != 0 || windows.minor_subsystem_version != 0 {
+                    Some(format!(
+                        "{}.{}",
+                        windows.major_subsystem_version, windows.minor_subsystem_version
+                    ))
+                } else {
+                    None
+                };
 
             return Some(PeVersionInfo {
                 file_version,
                 product_version,
-                company: None,        // Not available from headers
-                product_name: None,   // Not available from headers
+                company: None,      // Not available from headers
+                product_name: None, // Not available from headers
             });
         }
     }
@@ -348,7 +381,11 @@ pub fn extract_elf_version_info(contents: &[u8]) -> Option<Vec<String>> {
             for note_result in note_iter {
                 if let Ok(n) = note_result {
                     if n.name == "GNU" && n.n_type == goblin::elf::note::NT_GNU_BUILD_ID {
-                        let hex = n.desc.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+                        let hex = n
+                            .desc
+                            .iter()
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<String>();
                         versions.push(hex);
                     }
                 }
