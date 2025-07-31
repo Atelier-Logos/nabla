@@ -10,10 +10,9 @@ repository = "https://github.com/Atelier-Logos/nabla"
 homepage = "https://nabla.atelierlogos.studio"
 include = [
     "src/**/*.rs",
-    "Cargo.toml",
+    "Cargo.toml", 
     "README.md",
-    "LICENSE",
-    "public/**/*"
+    "LICENSE"
 ]
 
 [features]
