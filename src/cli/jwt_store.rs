@@ -1,9 +1,13 @@
 use anyhow::{Result, anyhow};
+use base64::{Engine as _, engine::general_purpose};
 use home::home_dir;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+
+#[cfg(feature = "private")]
+use doppler_rs::{apis::client::Client, apis::Error as DopplerError};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtData {
@@ -85,13 +89,14 @@ impl JwtStore {
     }
 
     pub fn verify_and_store_jwt(&self, jwt_token: &str) -> Result<JwtData> {
-        // TODO: Replace with your actual signing key - this should be the same key used in your backend
-        // For now using a placeholder - you'll need to set this to your actual signing key
-        let signing_key = std::env::var("NABLA_JWT_SECRET").map_err(|_| {
-            anyhow!("NABLA_JWT_SECRET environment variable is required for JWT verification")
-        })?;
+        // Get signing key using the same logic as config.rs
+        let signing_key_b64 = self.get_license_signing_key()?;
 
-        let key = DecodingKey::from_secret(signing_key.as_ref());
+        // Decode the base64 key like the minting tool does
+        let key_bytes = general_purpose::URL_SAFE_NO_PAD.decode(signing_key_b64.trim())
+            .map_err(|e| anyhow!("Failed to decode LICENSE_SIGNING_KEY as base64: {}", e))?;
+
+        let key = DecodingKey::from_secret(&key_bytes);
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
@@ -113,5 +118,44 @@ impl JwtStore {
         self.save_jwt(&jwt_data)?;
 
         Ok(jwt_data)
+    }
+
+    fn get_license_signing_key(&self) -> Result<String> {
+        // Determine deployment type
+        let deployment_type = std::env::var("NABLA_DEPLOYMENT")
+            .unwrap_or_else(|_| "oss".to_string());
+
+        match deployment_type.to_lowercase().as_str() {
+            "oss" => {
+                // Use default OSS key
+                Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
+            }
+            "private" => {
+                #[cfg(feature = "private")]
+                {
+                    // Try Doppler first for private deployments
+                    if let (Ok(project), Ok(config_name)) = (
+                        std::env::var("DOPPLER_PROJECT"),
+                        std::env::var("DOPPLER_CONFIG")
+                    ) {
+                        if let Ok(doppler_token) = std::env::var("DOPPLER_TOKEN") {
+                            let client = Client::new(&doppler_token);
+                            if let Ok(secret) = client.get_secret(&project, &config_name, "LICENSE_SIGNING_KEY") {
+                                return Ok(secret.value);
+                            }
+                        }
+                    }
+                }
+                
+                // Fallback to environment variable
+                std::env::var("LICENSE_SIGNING_KEY")
+                    .map_err(|_| anyhow!("LICENSE_SIGNING_KEY environment variable is required for JWT verification"))
+            }
+            _ => {
+                // Invalid deployment type, fallback to environment variable
+                std::env::var("LICENSE_SIGNING_KEY")
+                    .map_err(|_| anyhow!("LICENSE_SIGNING_KEY environment variable is required for JWT verification"))
+            }
+        }
     }
 }

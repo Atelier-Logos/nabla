@@ -1,0 +1,335 @@
+![](https://github.com/Atelier-Logos/nabla/blob/main/public/banner.png?raw=true)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<a href="https://app.aikido.dev/audit-report/external/G521LxDZEcKvh8XO6zdBP6gW/request" target="_blank">
+    <img src="https://app.aikido.dev/assets/badges/label-only-light-theme.svg" alt="Aikido Security Audit Report" height="40" />    
+</a>
+
+
+# Nabla - An OSS SAST/SCA API for calculating your SSCS gradients
+
+![terminal demo](demo.gif)
+
+> The nabla is used in vector calculus as part of three distinct differential operators: the gradient (∇), the divergence (∇⋅), and the curl (∇×)
+
+Nabla is a binary-first, fair-source, secure API for SAST/SCA tasks — designed to analyze, monitor, and validate the binaries used in your tools, applications, or infrastructure.
+
+Built in Rust and deployable anywhere via Docker, Nabla helps modern teams build resilient CI/CD pipelines by generating attestations, SBOMs, CVE reports, and more — all from binaries alone.
+
+## 🧐 Why Nabla?
+
+We built this tool because as ecosystems like Rust and Wasm grow, it's becoming more and more common for developers to use third-party binaries in their code and infrastructure. 
+
+This introduces risk into the software supply chain, including:
+
+    - Shadow dependencies and bundled binaries
+    - Missing or unverifiable SBOMs
+    - Unknown vulnerabilities (CVEs)
+    - Inability to produce attestations or verify signatures
+
+Nabla acts like a firewall for your binary inputs — providing deep binary analysis, vulnerability detection, attestation, and SBOMs in a clean, simple API.
+
+## ✨ Features
+
+- **🔍 Binary Analysis**:  ELF, PE, Mach-O, and Wasm parsing via `goblin`
+- **🧾 SBOM Generation**: CycloneDX format generation from extracted packages
+- **🚨 CVE Lookup**: Detect vulnerabilities in known packages and binary patterns
+- **✍️ Attestation**: Sigstore-compatible predicate output ready for signing
+- **⛓️‍💥 Diffing**: Compare two binaries and view differences in content and structure
+- **⚙️ REST API**: JSON-first API built on Axum, ready for CI/CD pipelines
+
+## 🔌 CLI Commands
+
+All commands require authentication unless otherwise specified. Set your JWT token using `nabla-cli auth --set-jwt <token>`.
+
+### Binary Analysis
+
+Analyze a binary file to extract metadata, packages, and generate SBOMs.
+
+```bash
+nabla-cli binary analyze <FILE>
+```
+
+**Example:**
+```bash
+nabla-cli binary analyze ./my_binary
+```
+
+> **REST equivalent:** `POST /binary/analyze`
+
+### Binary Comparison
+
+Compare two binaries to identify differences in packages, symbols, and metadata.
+
+```bash
+nabla-cli diff <FILE1> <FILE2>
+```
+
+**Example:**
+```bash
+nabla-cli diff old_binary new_binary
+```
+
+> **REST equivalent:** `POST /binary/diff`
+
+### Generate Attestations
+
+Create Sigstore-compatible attestations for binaries with cryptographic signing.
+
+```bash
+nabla-cli binary attest --signing-key <SIGNING_KEY> <FILE>
+```
+
+**Example:**
+```bash
+nabla-cli binary attest --signing-key my_signing_key ./my_binary
+```
+
+> **REST equivalent:** `POST /binary/attest`
+
+### CVE Scanning
+
+Scan binaries for known vulnerabilities in detected packages.
+
+```bash
+nabla-cli binary check-cves <FILE>
+```
+
+**Example:**
+```bash
+nabla-cli binary check-cves ./my_binary
+```
+
+> **REST equivalent:** `POST /binary/check-cves`
+
+### AI-Powered Analysis
+
+Generate SBOMs and perform AI-powered binary analysis through natural language.
+
+```bash
+nabla-cli chat <MESSAGE>
+```
+
+**Example:**
+```bash
+nabla-cli chat "Generate a CycloneDX SBOM for this binary"
+```
+
+> **REST equivalent:** `POST /binary/chat`
+
+## Authentication & Configuration
+
+### Authentication
+
+Set your JWT token for API access:
+
+```bash
+nabla-cli auth --set-jwt <JWT_TOKEN>
+```
+
+Check authentication status:
+
+```bash
+nabla-cli auth status
+```
+
+Upgrade authentication:
+
+```bash
+nabla-cli auth upgrade
+```
+
+### Configuration Management
+
+View all configuration settings:
+
+```bash
+nabla-cli config list
+```
+
+Get a specific configuration value:
+
+```bash
+nabla-cli config get <KEY>
+```
+
+Set a configuration value:
+
+```bash
+nabla-cli config set <KEY> <VALUE>
+```
+
+Set the base URL for the API:
+
+```bash
+nabla-cli config set-base-url <URL>
+```
+
+### Server Mode
+
+Run Nabla in server mode (legacy):
+
+```bash
+nabla-cli --server --port 8080
+```
+
+Or using the server subcommand:
+
+```bash
+nabla-cli server
+```
+
+## Setup
+
+### Prerequisites
+
+- Rust 1.82+
+- A Nabla License Key
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+PORT=8080
+FIPS_MODE=false          # Enable FIPS 140-2 compliance
+FIPS_VALIDATION=false    # Enable FIPS validation checks
+```
+
+### Getting Started
+
+Clone the repo:
+
+```bash
+git clone https://github.com/jdbohrman/nabla.git
+cd nabla
+```
+
+Setup your environment:
+
+```bash
+cp .env.example .env
+```
+
+Edit .env:
+
+```env
+PORT=8080
+FIPS_MODE=false
+FIPS_VALIDATION=false
+```
+
+Run locally:
+
+```bash
+cargo run
+```
+
+Or with Docker:
+
+```bash
+# Standard mode
+docker build -t nabla .
+docker run -p 8080:8080 -e FIPS_MODE=false nabla
+
+# FIPS mode
+docker build -t nabla-enterprise --build-arg FIPS_MODE=true --build-arg FIPS_VALIDATION=true .
+docker run -p 8080:8080 -e FIPS_MODE=true -e FIPS_VALIDATION=true nabla-enterprise
+```
+
+## FIPS 140-2 Compliance
+
+Nabla supports FIPS 140-2 compliance mode for enterprise deployments:
+
+### FIPS Mode Features
+- **FIPS 140-2 Approved Algorithms**: SHA-256, SHA-512, HMAC-SHA256, AES-256-GCM
+- **FIPS Validation**: Runtime validation of cryptographic operations
+- **Compliance Reporting**: Health check endpoint reports detailed FIPS status
+- **Enterprise Ready**: FedRAMP, SOC 2, and HIPAA compliant
+- **FIPS-Compliant TLS**: Uses only FIPS-approved cipher suites
+- **FIPS-Compliant RNG**: Uses operating system secure random number generation
+- **JWT/HMAC Compliance**: Uses FIPS-approved HMAC-SHA256 for token validation
+
+### Environment Variables
+```bash
+FIPS_MODE=true           # Enable FIPS 140-2 compliance
+FIPS_VALIDATION=true     # Enable FIPS validation checks
+```
+
+### Health Check Response (FIPS Mode)
+```json
+{
+  "status": "healthy",
+  "service": "Nabla",
+  "version": "0.1.0",
+  "fips": {
+    "fips_mode": true,
+    "fips_compliant": true,
+    "fips_validation": true,
+    "approved_algorithms": [
+      "SHA-256",
+      "SHA-512",
+      "HMAC-SHA256",
+      "AES-256-GCM",
+      "TLS13_AES_256_GCM_SHA384"
+    ],
+    "hash_algorithm": "SHA-512",
+    "random_generator": "FIPS-compliant OS RNG"
+  }
+}
+```
+
+### Health Check Response (Standard Mode)
+```json
+{
+  "status": "healthy",
+  "service": "Nabla",
+  "version": "0.1.0",
+  "fips": {
+    "fips_mode": false,
+    "fips_compliant": false,
+    "fips_validation": false,
+    "hash_algorithm": "Blake3",
+    "random_generator": "Standard RNG"
+  }
+}
+```
+
+### FIPS Implementation Details
+
+#### Cryptographic Algorithms
+- **Hashing**: SHA-256, SHA-512 (FIPS mode) vs Blake3 (standard mode)
+- **HMAC**: HMAC-SHA256 for JWT token validation
+- **Random Generation**: OS secure RNG (FIPS) vs standard RNG (standard)
+- **TLS Cipher Suites**: FIPS-approved suites only in FIPS mode
+
+#### Binary Analysis
+- **Hash Generation**: Uses configurable crypto provider
+- **Metadata**: Includes FIPS status and algorithm information
+- **Consistency**: All cryptographic operations respect FIPS mode
+
+#### HTTP Client
+- **TLS Configuration**: FIPS-compliant cipher suites when enabled
+- **Certificate Validation**: Enhanced security in FIPS mode
+- **Connection Security**: Uses rustls with FIPS-approved settings
+
+### Docker Deployment
+```bash
+# Standard deployment
+docker run -e FIPS_MODE=false nabla:latest
+
+# FIPS-compliant deployment
+docker run -e FIPS_MODE=true -e FIPS_VALIDATION=true nabla-enterprise:latest
+```
+
+### Compliance Certifications
+- **FIPS 140-2 Level 1**: Cryptographic module compliance
+- **FedRAMP**: Federal Risk and Authorization Management Program
+- **SOC 2 Type II**: Security, availability, and confidentiality
+- **HIPAA**: Health Insurance Portability and Accountability Act
+
+## License
+
+This project is licensed under the Functional Source License - see the LICENSE file for details.
+
+Want a license key? Chat up the Atelier Logos team and get a 14-day trial
