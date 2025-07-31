@@ -3,7 +3,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use clap::Parser;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, errors::ErrorKind};
 use serde::Deserialize;
-use nabla_core::config::Config;
+use nabla_cli::config::Config;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
