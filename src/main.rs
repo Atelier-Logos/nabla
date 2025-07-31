@@ -53,9 +53,8 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     // Only require LICENSE_SIGNING_KEY for cloud and private deployments
     let key_b64 = match config.deployment_type {
         config::DeploymentType::OSS => {
-            // For OSS, use a default key
-            base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode(b"default-server-key-32-bytes-xx")
+            // Safe default key for OSS - public and non-secret
+            "t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string()
         }
         config::DeploymentType::Cloud | config::DeploymentType::Private => {
             std::env::var("LICENSE_SIGNING_KEY")
