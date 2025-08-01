@@ -602,6 +602,28 @@ fn analyze_wasm(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
     Ok(())
 }
 
+// New analyzer function
+fn analyze_intel_hex(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
+    // Parse Intel HEX records
+    // Extract memory segments and data
+    // Identify entry points and interrupt vectors
+}
+
+// New analyzer function
+fn analyze_srec(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
+    // Parse Intel HEX records
+    // Extract memory segments and data
+    // Identify entry points and interrupt vectors
+}
+
+// ARM Cortex-M specific analysis
+fn analyze_arm_cortex_m(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
+    // Parse vector table at 0x00000000
+    // Extract interrupt handlers
+    // Identify RTOS patterns
+    // Analyze memory layout (Flash/RAM)
+}
+
 fn analyze_unknown_binary(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Result<()> {
     tracing::debug!("Performing generic binary analysis");
 

@@ -88,6 +88,13 @@ object = "0.34"
 wasmparser = "0.121"
 infer = "0.16"
 pelite = "0.10"
+yara-x = "1.4.0"
+dicom = "0.8.2"
+ihex = "3.0.0"
+srec = "0.2.0"
+capstone = "0.13.0"
+petgraph = "0.8.2"
+rayon = "1.10.0"
 
 # Secret scanning
 aho-corasick = "1.1"
