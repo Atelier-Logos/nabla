@@ -2,7 +2,6 @@
 // This tests the actual analyze_binary function with real ARM ELF data
 
 use nabla_cli::binary::analyze_binary;
-use nabla_cli::enterprise::crypto::CryptoProvider;
 use std::fs;
 use tokio;
 
@@ -77,11 +76,10 @@ fn create_test_arm_elf() -> Vec<u8> {
 
 #[tokio::test]
 async fn test_enhanced_arm_elf_parsing() {
-    let crypto_provider = CryptoProvider::new(false, false).unwrap();
     let arm_elf_data = create_test_arm_elf();
     
     // This is the real test - calling our actual analyze_binary function
-    let result = analyze_binary("test_arm.elf", &arm_elf_data, &crypto_provider).await;
+    let result = analyze_binary("test_arm.elf", &arm_elf_data).await;
     
     assert!(result.is_ok(), "ARM ELF analysis should succeed");
     
@@ -150,10 +148,9 @@ async fn test_enhanced_arm_elf_parsing() {
 
 #[tokio::test] 
 async fn test_enhanced_vs_basic_arm_detection() {
-    let crypto_provider = CryptoProvider::new(false, false).unwrap();
     let arm_elf_data = create_test_arm_elf();
     
-    let analysis = analyze_binary("arm_test.elf", &arm_elf_data, &crypto_provider)
+    let analysis = analyze_binary("arm_test.elf", &arm_elf_data)
         .await
         .expect("Analysis should succeed");
     

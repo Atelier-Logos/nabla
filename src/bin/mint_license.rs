@@ -68,6 +68,10 @@ struct Args {
     #[arg(long)]
     signed_attestation: bool,
 
+    /// Enable exploitability analysis
+    #[arg(long)]
+    exploitability_analysis: bool,
+
     /// Monthly binary analysis limit
     #[arg(long, default_value_t = 100)]
     monthly_binaries: u32,
@@ -114,6 +118,7 @@ struct PlanFeatures {
     custom_models: bool,
     sbom_generation: bool,
     vulnerability_scanning: bool,
+    exploitability_analysis: bool,
     signed_attestation: bool,
     monthly_binaries: u32,
 }
@@ -154,6 +159,7 @@ fn main() -> anyhow::Result<()> {
         custom_models: args.custom_models,
         sbom_generation: args.sbom_generation,
         vulnerability_scanning: args.vulnerability_scanning,
+        exploitability_analysis: args.exploitability_analysis,
         signed_attestation: args.signed_attestation,
         monthly_binaries: args.monthly_binaries,
     };

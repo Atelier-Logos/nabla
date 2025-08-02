@@ -148,9 +148,6 @@ doppler-rs = { version = "0.0.2", optional = true }
 name = "nabla"
 path = "src/bin/nabla_shell.rs"
 
-[[bin]]
-name = "test-middleware"
-path = "src/bin/test_middleware.rs"
 
 [[bin]]
 name = "test-deployment-modes"
