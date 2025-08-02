@@ -6,7 +6,7 @@ use axum::{
     http::{Request, StatusCode},
     routing::post,
 };
-use nabla_cli::{AppState, Config, middleware::validate_license_jwt};
+use nabla_cli::{AppState, Config, config::DeploymentType, middleware::validate_license_jwt};
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -17,21 +17,22 @@ async fn test_protected_route() -> &'static str {
 
 #[tokio::test]
 async fn test_middleware_fips_mode_enabled() {
-    // Create app state with FIPS mode enabled
+    // Create app state for NablaSecure deployment 
     let config = Config {
-        fips_mode: true,
-        fips_validation: true,
+        deployment_type: DeploymentType::NablaSecure,
+        enterprise_features: true,
         port: 8080,
         // Add other required fields
         ..Default::default()
     };
 
     let state = AppState {
-        config,
+        config: config.clone(),
         client: reqwest::Client::new(),
         base_url: "http://localhost:8080".to_string(),
+        enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        crypto_provider: nabla::enterprise::crypto::CryptoProvider::new(true, true).unwrap(),
+        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -54,21 +55,22 @@ async fn test_middleware_fips_mode_enabled() {
 
 #[tokio::test]
 async fn test_middleware_fips_mode_disabled() {
-    // Create app state with FIPS mode disabled
+    // Create app state for OSS deployment
     let config = Config {
-        fips_mode: false,
-        fips_validation: false,
+        deployment_type: DeploymentType::OSS,
+        enterprise_features: false,
         port: 8080,
         // Add other required fields
         ..Default::default()
     };
 
     let state = AppState {
-        config,
+        config: config.clone(),
         client: reqwest::Client::new(),
         base_url: "http://localhost:8080".to_string(),
+        enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        crypto_provider: nabla::enterprise::crypto::CryptoProvider::new(false, false).unwrap(),
+        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -99,6 +101,6 @@ fn test_config_default_implementation() {
     // Test that Config has a Default implementation
     let config = Config::default();
     assert_eq!(config.port, 8080);
-    assert!(!config.fips_mode);
-    assert!(!config.fips_validation);
+    assert_eq!(config.deployment_type, DeploymentType::OSS);
+    assert!(!config.enterprise_features);
 }

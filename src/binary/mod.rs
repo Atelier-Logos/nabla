@@ -4,7 +4,7 @@ pub mod check_vulnerabilities;
 pub mod metadata_extractor;
 
 pub use self::binary_analysis::analyze_binary;
-pub use self::check_vulnerabilities::{VulnerabilityMatch, scan_binary_vulnerabilities};
+pub use self::check_vulnerabilities::{VulnerabilityMatch, EnterpriseVulnerabilityMatch, scan_binary_vulnerabilities, enterprise_scan_binary_vulnerabilities};
 pub use self::metadata_extractor::{
     LicenseInfo, VersionInfo, extract_license_info, extract_version_info,
 };

@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum DeploymentType {
     OSS,
-    Private,
+    NablaSecure,
 }
 
 impl std::str::FromStr for DeploymentType {
@@ -13,7 +13,7 @@ impl std::str::FromStr for DeploymentType {
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "oss" => Ok(DeploymentType::OSS),
-            "private" => Ok(DeploymentType::Private),
+            "nablasecure" | "nabla-secure" | "secure" => Ok(DeploymentType::NablaSecure),
             _ => Err(anyhow::anyhow!("Invalid deployment type: {}", s)),
         }
     }
@@ -23,9 +23,8 @@ impl std::str::FromStr for DeploymentType {
 pub struct Config {
     pub port: u16,
     pub base_url: String,
-    pub fips_mode: bool,
-    pub fips_validation: bool,
     pub deployment_type: DeploymentType,
+    pub enterprise_features: bool,
     pub license_signing_key: String,
 }
 
@@ -34,9 +33,8 @@ impl Default for Config {
         Self {
             port: 8080,
             base_url: "http://localhost:8080".to_string(),
-            fips_mode: false,
-            fips_validation: false,
             deployment_type: DeploymentType::OSS,
+            enterprise_features: false, // OSS defaults to no enterprise features
             license_signing_key: "t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string(),
         }
     }
@@ -50,6 +48,14 @@ impl Config {
             .unwrap_or_else(|_| "oss".to_string())
             .parse()?;
 
+        let enterprise_features = std::env::var("NABLA_ENTERPRISE_FEATURES")
+            .unwrap_or_else(|_| match deployment_type {
+                DeploymentType::NablaSecure => "true".to_string(),
+                DeploymentType::OSS => "false".to_string(),
+            })
+            .parse()
+            .unwrap_or(false);
+
         let license_signing_key = Self::get_license_signing_key(&deployment_type)?;
         
         let config = Config {
@@ -58,15 +64,8 @@ impl Config {
                 .parse()?,
             base_url: std::env::var("BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:8080".to_string()),
-            fips_mode: std::env::var("FIPS_MODE")
-                .unwrap_or_else(|_| "false".to_string())
-                .parse()
-                .unwrap_or(false),
-            fips_validation: std::env::var("FIPS_VALIDATION")
-                .unwrap_or_else(|_| "false".to_string())
-                .parse()
-                .unwrap_or(false),
             deployment_type,
+            enterprise_features,
             license_signing_key,
         };
 
@@ -79,7 +78,7 @@ impl Config {
             return Ok(key);
         }
         
-        // Try Doppler API via HTTP for both OSS and Private deployments
+        // Try Doppler API via HTTP for both OSS and NablaSecure deployments
         if let (Ok(project), Ok(config_name)) = (
             std::env::var("DOPPLER_PROJECT"),
             std::env::var("DOPPLER_CONFIG")
@@ -129,8 +128,8 @@ impl Config {
                 // Hardcoded public key for OSS deployments as last resort
                 Ok("t6eLp6y0Ly8BZJIVv_wK71WyBtJ1zY2Pxz2M_0z5t8Q".to_string())
             }
-            DeploymentType::Private => {
-                Err(anyhow::anyhow!("LICENSE_SIGNING_KEY required for private deployment (try Doppler or env var)"))
+            DeploymentType::NablaSecure => {
+                Err(anyhow::anyhow!("LICENSE_SIGNING_KEY required for NablaSecure deployment (try Doppler or env var)"))
             }
         }
     }

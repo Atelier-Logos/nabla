@@ -19,7 +19,6 @@ use crate::enterprise::providers::{
 use crate::{
     AppState,
     binary::{BinaryAnalysis, VulnerabilityMatch, analyze_binary, scan_binary_vulnerabilities},
-    middleware::PlanFeatures,
 };
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
@@ -158,49 +157,17 @@ pub struct ChatResponse {
     pub tokens_used: usize,
 }
 
-pub async fn health_check(State(mut state): State<AppState>) -> Json<serde_json::Value> {
-    let fips_status = if state.config.fips_mode {
-        state.crypto_provider.validate_fips_compliance().is_ok()
-    } else {
-        false
-    };
-
-    let fips_details = if state.config.fips_mode {
-        json!({
-            "fips_mode": true,
-            "fips_compliant": fips_status,
-            "fips_validation": state.config.fips_validation,
-            "approved_algorithms": [
-                "SHA-256",
-                "SHA-512",
-                "HMAC-SHA256",
-                "AES-256-GCM",
-                "TLS13_AES_256_GCM_SHA384"
-            ],
-            "hash_algorithm": "SHA-512",
-            "random_generator": "FIPS-compliant OS RNG"
-        })
-    } else {
-        json!({
-            "fips_mode": false,
-            "fips_compliant": false,
-            "fips_validation": false,
-            "hash_algorithm": "Blake3",
-            "random_generator": "Standard RNG"
-        })
-    };
-
+pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({
         "status": "healthy",
         "service": "Nabla",
         "version": env!("CARGO_PKG_VERSION"),
-        "fips": fips_details
     }))
 }
 
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
@@ -287,7 +254,7 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
 
     // Analyze the binary
-    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider)
+    let analysis = analyze_binary(&file_name, &contents)
         .await
         .map_err(|e| {
             tracing::error!("Binary analysis failed: {}", e);
@@ -315,10 +282,12 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
+use crate::binary::enterprise_scan_binary_vulnerabilities;
+
 pub async fn check_cve(
     State(state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     tracing::info!("check_cve handler called");
 
     let mut contents = vec![];
@@ -368,7 +337,7 @@ pub async fn check_cve(
         ));
     }
 
-    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider)
+    let analysis = analyze_binary(&file_name, &contents)
         .await
         .map_err(|e| {
             tracing::error!("Binary analysis failed: {}", e);
@@ -383,15 +352,25 @@ pub async fn check_cve(
 
     tracing::info!("Binary analysis complete: {:?}", analysis);
 
-    let matches = scan_binary_vulnerabilities(&analysis);
-    tracing::info!("Vuln scan complete. {} match(es)", matches.len());
+    let response_json = if state.config.enterprise_features {
+        let matches = enterprise_scan_binary_vulnerabilities(&analysis);
+        tracing::info!(
+            "Enterprise vuln scan complete. {} match(es)",
+            matches.len()
+        );
+        serde_json::to_value(matches).unwrap_or_default()
+    } else {
+        let matches = scan_binary_vulnerabilities(&analysis);
+        tracing::info!("OSS vuln scan complete. {} match(es)", matches.len());
+        serde_json::to_value(matches).unwrap_or_default()
+    };
 
-    Ok(Json(CveScanResponse { matches }))
+    Ok(Json(response_json))
 }
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     // Extract two files
@@ -436,7 +415,7 @@ pub async fn diff_binaries(
     }
 
     // Analyze each binary to get symbol information
-    let analysis1 = analyze_binary(&files[0].0, &files[0].1, &state.crypto_provider)
+    let analysis1 = analyze_binary(&files[0].0, &files[0].1)
         .await
         .map_err(|e| {
             (
@@ -448,7 +427,7 @@ pub async fn diff_binaries(
             )
         })?;
 
-    let analysis2 = analyze_binary(&files[1].0, &files[1].1, &state.crypto_provider)
+    let analysis2 = analyze_binary(&files[1].0, &files[1].1)
         .await
         .map_err(|e| {
             (
@@ -525,15 +504,19 @@ pub async fn diff_binaries(
 
 #[axum::debug_handler]
 pub async fn chat_with_binary(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     req: Request,
 ) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Get features from request extensions first (set by middleware)
-    let features = req
-        .extensions()
-        .get::<PlanFeatures>()
-        .cloned()
-        .unwrap_or_else(|| PlanFeatures::default_oss());
+    // Check if chat is enabled based on deployment configuration
+    if !_state.config.enterprise_features {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "feature_disabled".to_string(),
+                message: "Chat feature requires NablaSecure deployment".to_string(),
+            }),
+        ));
+    }
 
     // Extract JSON body manually
     let (_parts, body) = req.into_parts();
@@ -563,16 +546,7 @@ pub async fn chat_with_binary(
         }
     };
 
-    // Chat is always a paid feature - check the feature flag
-    if !features.chat_enabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(ErrorResponse {
-                error: "chat_not_available".to_string(),
-                message: "Chat feature is not available with your current license. Please schedule a demo to upgrade your plan: https://cal.com/team/atelier-logos/platform-intro".to_string(),
-            }),
-        ));
-    }
+    // Chat is always an enterprise feature - already checked above
     // Validate and sanitize the file path using the helper function
     let canonical_path = validate_file_path(&request.file_path)?;
 
@@ -594,7 +568,7 @@ pub async fn chat_with_binary(
         .unwrap_or("unknown")
         .to_string();
 
-    let analysis = analyze_binary(&file_name, &file_content, &state.crypto_provider)
+    let analysis = analyze_binary(&file_name, &file_content)
         .await
         .map_err(|e| {
             (

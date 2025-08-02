@@ -18,8 +18,8 @@ pub struct AppState {
     pub config: Config,
     pub client: Client,
     pub base_url: String,
+    pub enterprise_features: bool,
     pub license_jwt_secret: Arc<[u8; 32]>,
-    pub crypto_provider: enterprise::crypto::CryptoProvider,
     pub inference_manager: Arc<enterprise::providers::InferenceManager>, // add this
 }
 
@@ -69,18 +69,12 @@ pub mod server {
 
         let inference_manager = Arc::new(InferenceManager::new());
 
-
-        let crypto_provider = crate::enterprise::crypto::CryptoProvider::new(
-            config.fips_mode,
-            config.fips_validation,
-        )?;
-
         let state = crate::AppState {
             config: config.clone(),
             client,
             base_url: config.base_url.clone(),
+            enterprise_features: config.enterprise_features,
             license_jwt_secret,
-            crypto_provider,
             inference_manager,
         };
 

@@ -1,13 +1,16 @@
 use anyhow::Result;
+use flate2::read::GzDecoder;
 use home::home_dir;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
 use std::{fs::File, io::BufReader, path::PathBuf};
 
 use super::BinaryAnalysis;
+use crate::enterprise::secure::reachability::{ControlFlowGraph, ExploitabilityAnalysis};
 
-const CVE_JSON_URL: &str = "https://services.nvd.nist.gov/rest/json/cves/2.0";
+const CVE_BULK_DATA_URL: &str = "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-modified.json.gz";
 
 fn get_cve_cache_path() -> Result<PathBuf> {
     let home = home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
@@ -25,6 +28,14 @@ pub struct VulnerabilityMatch {
     pub cve_id: String,
     pub description: String,
     pub matched_keyword: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnterpriseVulnerabilityMatch {
+    pub cve_id: String,
+    pub description: String,
+    pub matched_keyword: String,
+    pub exploitability: ExploitabilityAnalysis,
 }
 
 pub struct CveEntry {
@@ -65,17 +76,19 @@ pub fn load_cve_db() -> Result<Vec<CveEntry>> {
 }
 
 fn download_and_cache_cve_db(cache_path: PathBuf) -> Result<Vec<CveEntry>> {
-    // For now, use a simplified approach - download recent CVEs only
-    // In production, you might want to download the full database or use incremental updates
-    let response = ureq::get(CVE_JSON_URL)
-        .query("resultsPerPage", "2000") // Limit to most recent 2000 CVEs to keep size manageable
+    tracing::info!("Downloading complete CVE database from NVD bulk feed (this may take a few minutes)...");
+    
+    // Download the compressed CVE database
+    let response = ureq::get(CVE_BULK_DATA_URL)
         .call()
-        .map_err(|e| anyhow::anyhow!("Failed to download CVE data: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to download CVE bulk data: {}", e))?;
     
-    let v: Value = response.into_json()
-        .map_err(|e| anyhow::anyhow!("Failed to parse CVE JSON: {}", e))?;
+    // Read the gzip-compressed response
+    let mut gz_decoder = GzDecoder::new(response.into_reader());
+    let v: Value = serde_json::from_reader(&mut gz_decoder)
+        .map_err(|e| anyhow::anyhow!("Failed to parse compressed CVE JSON: {}", e))?;
     
-    // Cache the downloaded data
+    // Cache the uncompressed data
     if let Ok(file) = std::fs::File::create(&cache_path) {
         let _ = serde_json::to_writer(file, &v);
         tracing::info!("Cached CVE database to: {}", cache_path.display());
@@ -175,6 +188,94 @@ pub fn collect_cpes(value: &Value, out: &mut Vec<String>) {
     }
 }
 
+/// Extract library keywords from embedded strings using pattern matching
+fn extract_library_keywords_from_strings(embedded_strings: &[String]) -> Vec<String> {
+    let mut keywords = Vec::new();
+    
+    for string in embedded_strings {
+        let lower = string.to_lowercase();
+        
+        // Extract individual words that might be library names
+        let words: Vec<&str> = lower.split_whitespace().collect();
+        for word in &words {
+            if is_potential_library_name(word) {
+                keywords.push(word.to_string());
+            }
+        }
+        
+        // Look for version patterns like "name version" or "name-version"
+        keywords.extend(extract_name_version_pairs(&lower));
+        
+        // Add words from the string that might be component names
+        keywords.extend(extract_component_names(&lower));
+    }
+    
+    keywords.sort();
+    keywords.dedup();
+    keywords
+}
+
+/// Check if a word could be a library/component name
+fn is_potential_library_name(word: &str) -> bool {
+    // Skip very short words, version numbers, and common non-library words
+    if word.len() < 3 || word.chars().all(|c| c.is_numeric() || c == '.') {
+        return false;
+    }
+    
+    // Skip common non-library words
+    let skip_words = ["the", "and", "for", "with", "this", "that", "from", "into", "version", "server", "web", "tool", "system"];
+    if skip_words.contains(&word) {
+        return false;
+    }
+    
+    // Include words that look like library names (contain letters)
+    word.chars().any(|c| c.is_alphabetic()) && word.len() <= 20
+}
+
+/// Extract "name version" pairs from strings
+fn extract_name_version_pairs(s: &str) -> Vec<String> {
+    let mut pairs = Vec::new();
+    
+    // Use regex to find patterns like "openssl 1.0.2a" or "libname-1.2.3"
+    
+    // Pattern for "name version" (name followed by version number)
+    if let Ok(re) = Regex::new(r"([a-zA-Z][a-zA-Z0-9_-]*)\s+([0-9]+\.[0-9]+[a-zA-Z0-9.-]*)") {
+        for cap in re.captures_iter(s) {
+            if let (Some(name), Some(_version)) = (cap.get(1), cap.get(2)) {
+                pairs.push(name.as_str().to_lowercase());
+            }
+        }
+    }
+    
+    // Pattern for "name-version" (name hyphenated with version)
+    if let Ok(re) = Regex::new(r"([a-zA-Z][a-zA-Z0-9_]*)-([0-9]+\.[0-9]+[a-zA-Z0-9.-]*)") {
+        for cap in re.captures_iter(s) {
+            if let (Some(name), Some(_version)) = (cap.get(1), cap.get(2)) {
+                pairs.push(name.as_str().to_lowercase());
+            }
+        }
+    }
+    
+    pairs
+}
+
+/// Extract component names from strings
+fn extract_component_names(s: &str) -> Vec<String> {
+    let mut components = Vec::new();
+    
+    // Split on various delimiters and collect meaningful words
+    for delimiter in [" ", "-", "_", "/", "\\", ":", ";"] {
+        for part in s.split(delimiter) {
+            let cleaned = part.trim_matches(|c: char| !c.is_alphanumeric());
+            if is_potential_library_name(cleaned) {
+                components.push(cleaned.to_lowercase());
+            }
+        }
+    }
+    
+    components
+}
+
 /// Scan a `BinaryAnalysis` for potential vulnerabilities by matching linked libraries and import names
 /// against the locally cached NVD CVE database.
 pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<VulnerabilityMatch> {
@@ -198,6 +299,9 @@ pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<Vulnerabili
         );
     }
 
+    // Extract library names and versions from embedded strings
+    keywords.extend(extract_library_keywords_from_strings(&analysis.embedded_strings));
+
     let mut matches = Vec::new();
 
     for entry in CVE_DB.iter() {
@@ -216,6 +320,38 @@ pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<Vulnerabili
                 break;
             }
         }
+    }
+
+    matches
+}
+
+/// Enterprise-level vulnerability scanning with reachability analysis.
+pub fn enterprise_scan_binary_vulnerabilities(
+    analysis: &BinaryAnalysis,
+) -> Vec<EnterpriseVulnerabilityMatch> {
+    let mut matches = Vec::new();
+    let mut cfg = ControlFlowGraph::build_from_analysis(analysis);
+
+    // Define sources for exploitability analysis (e.g., network-related imports)
+    let sources: Vec<String> = analysis
+        .imports
+        .iter()
+        .filter(|i| i.contains("recv") || i.contains("read") || i.contains("socket"))
+        .cloned()
+        .collect();
+
+    let regular_matches = scan_binary_vulnerabilities(analysis);
+
+    for match_item in regular_matches {
+        let exploitability =
+            cfg.analyze_exploitability(&sources, &match_item.matched_keyword);
+
+        matches.push(EnterpriseVulnerabilityMatch {
+            cve_id: match_item.cve_id,
+            description: match_item.description,
+            matched_keyword: match_item.matched_keyword,
+            exploitability,
+        });
     }
 
     matches

@@ -123,7 +123,7 @@ impl JwtStore {
             return Ok(key);
         }
         
-        // Try Doppler API via HTTP for both OSS and Private deployments
+        // Try Doppler API via HTTP for both OSS and NablaSecure deployments
         if let (Ok(project), Ok(config_name)) = (
             std::env::var("DOPPLER_PROJECT"),
             std::env::var("DOPPLER_CONFIG")

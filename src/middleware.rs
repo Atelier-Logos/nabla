@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{config::DeploymentType, AppState};
 use once_cell::sync::Lazy;
 use serde_json::json;
 
@@ -35,6 +35,7 @@ pub struct PlanFeatures {
     pub custom_models: bool,
     pub sbom_generation: bool,
     pub vulnerability_scanning: bool,
+    pub exploitability_analysis: bool,
     pub signed_attestation: bool,
     pub monthly_binaries: u32,
 }
@@ -52,6 +53,7 @@ impl PlanFeatures {
             custom_models: false,
             sbom_generation: true,
             vulnerability_scanning: true,
+            exploitability_analysis: false,
             signed_attestation: false,
             monthly_binaries: 100,
         }
@@ -63,15 +65,14 @@ pub async fn validate_license_jwt(
     mut request: Request,
     next: Next,
 ) -> Result<Response, impl IntoResponse> {
-    // Check if FIPS mode is enabled
-    if !state.config.fips_mode {
-        tracing::info!("FIPS mode disabled - using default OSS features");
-        // Add default OSS features to request extensions for endpoints to use
+    // If in OSS deployment, use default features and skip JWT validation
+    if state.config.deployment_type == DeploymentType::OSS {
+        tracing::info!("OSS deployment - using default features");
         request.extensions_mut().insert(PlanFeatures::default_oss());
         return Ok(next.run(request).await);
     }
 
-    // 1. Extract Authorization header
+    // In NablaSecure deployment, a valid JWT is required
     let auth_header = request
         .headers()
         .get(header::AUTHORIZATION)
@@ -82,22 +83,14 @@ pub async fn validate_license_jwt(
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
                     "error": "missing_authorization",
-                    "message": "Missing or invalid Authorization header (required in FIPS mode)"
+                    "message": "Missing or invalid Authorization header (required for private deployment)"
                 })),
             )
         })?;
 
-    // 2. Decode and validate JWT token using HMAC secret
+    // Decode and validate JWT token using HMAC secret
     let decoding_key = DecodingKey::from_secret(&state.license_jwt_secret[..]);
-
-    // Use FIPS-compliant algorithm when FIPS mode is enabled
-    let algorithm = if state.config.fips_mode {
-        Algorithm::HS256 // FIPS-approved HMAC-SHA256
-    } else {
-        Algorithm::HS256 // Default to HS256 for consistency
-    };
-
-    let validation = Validation::new(algorithm);
+    let validation = Validation::new(Algorithm::HS256);
 
     let token_data = decode::<Claims>(auth_header, &decoding_key, &validation).map_err(|e| {
         eprintln!("JWT decode error: {:?}", e);
@@ -110,7 +103,7 @@ pub async fn validate_license_jwt(
         )
     })?;
 
-    // 3. Check rate limiting
+    // Check rate limiting
     let claims = token_data.claims;
     let key = format!("{}:{}", claims.sub, claims.deployment_id);
 
@@ -140,9 +133,9 @@ pub async fn validate_license_jwt(
         ));
     }
 
-    // 4. Add features to request extensions for endpoints to use
+    // Add features from the token to request extensions
     request.extensions_mut().insert(claims.features.clone());
 
-    // 5. Continue with the request
+    // Continue with the request
     Ok(next.run(request).await)
 }
