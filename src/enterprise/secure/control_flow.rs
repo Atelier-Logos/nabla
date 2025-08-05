@@ -1660,7 +1660,7 @@ impl ControlFlowGraph {
     }
 
     /// Analyze call graph relationships
-   pub pub fn analyze_call_graph(&self, analysis: &BinaryAnalysis) -> CallGraphAnalysis {
+    pub fn analyze_call_graph(&self, analysis: &BinaryAnalysis) -> CallGraphAnalysis {
         let mut call_sites = Vec::new();
         let mut function_summaries = HashMap::new();
         let mut recursive_functions = Vec::new();

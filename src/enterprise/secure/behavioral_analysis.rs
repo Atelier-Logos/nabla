@@ -81,7 +81,7 @@ pub fn analyze_behavioral_security(analysis: &BinaryAnalysis) -> BehavioralAnaly
     };
 
     // Build control flow graph for analysis
-    let cfg = match ControlFlowGraph::build_from_analysis(analysis) {
+    let cfg = match ControlFlowGraph::build_cfg(analysis) {
         Ok(cfg) => cfg,
         Err(e) => {
             // Fallback to simplified analysis if CFG construction fails
