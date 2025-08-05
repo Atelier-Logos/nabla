@@ -1,5 +1,5 @@
 pub mod behavioral_analysis;
-pub mod control_flow;
+pub mod control_flow::build_cfg;
 pub mod crypto_analysis;
 pub mod static_analysis;
 pub mod supply_chain;
