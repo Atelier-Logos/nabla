@@ -7,7 +7,7 @@ pub use self::binary_analysis::analyze_binary;
 pub use self::metadata_extractor::{
     LicenseInfo, VersionInfo, extract_license_info, extract_version_info,
 };
-pub use self::scanner::{ScanResult, enterprise_scan_binary, scan_binary};
+pub use self::scanner::{ScanResult, scan_binary};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

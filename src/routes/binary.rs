@@ -258,7 +258,7 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
-use crate::binary::enterprise_scan_binary;
+
 
 pub async fn check_cve(
     State(state): State<AppState>,
@@ -326,23 +326,13 @@ pub async fn check_cve(
 
     tracing::info!("Binary analysis complete: {:?}", analysis);
 
-    let response_json = if state.config.enterprise_features {
-        let scan_result = enterprise_scan_binary(&analysis);
-        tracing::info!(
-            "Enterprise vuln scan complete. {} vulnerability findings, {} security findings",
-            scan_result.vulnerability_findings.len(),
-            scan_result.security_findings.len()
-        );
-        serde_json::to_value(scan_result).unwrap_or_default()
-    } else {
-        let scan_result = scan_binary(&analysis);
-        tracing::info!(
-            "OSS vuln scan complete. {} vulnerability findings, {} security findings",
-            scan_result.vulnerability_findings.len(),
-            scan_result.security_findings.len()
-        );
-        serde_json::to_value(scan_result).unwrap_or_default()
-    };
+    let scan_result = scan_binary(&analysis);
+    tracing::info!(
+        "OSS vuln scan complete. {} vulnerability findings, {} security findings",
+        scan_result.vulnerability_findings.len(),
+        scan_result.security_findings.len()
+    );
+    let response_json = serde_json::to_value(scan_result).unwrap_or_default();
 
     Ok(Json(response_json))
 }

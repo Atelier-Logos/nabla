@@ -5,14 +5,10 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-mod auth;
 mod config;
-mod jwt_store;
 
 use crate::ssrf_protection::SSRFValidator;
-pub use auth::AuthArgs;
 pub use config::{ConfigCommands, ConfigStore, LLMProvider, LLMProvidersConfig};
-pub use jwt_store::*;
 
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB limit
 
@@ -73,10 +69,6 @@ fn validate_file_path(file_path: &str) -> Result<PathBuf> {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    Auth {
-        #[command(flatten)]
-        args: AuthArgs,
-    },
     Config {
         #[command(subcommand)]
         command: ConfigCommands,
@@ -95,7 +87,6 @@ pub enum Commands {
         #[arg(long)]
         provider: Option<String>, // Optional provider name, uses default if not specified
     },
-    Upgrade,
     Server {
         #[arg(long, default_value = "8080")]
         port: u16,
@@ -107,18 +98,12 @@ pub enum BinaryCommands {
     Analyze {
         file: String,
     },
-    Attest {
-        file: String,
-        #[arg(long)]
-        signing_key: String,
-    },
     CheckCves {
         file: String,
     },
 }
 
 pub struct NablaCli {
-    jwt_store: JwtStore,
     config_store: ConfigStore,
     http_client: Client,
 }
@@ -126,7 +111,6 @@ pub struct NablaCli {
 impl NablaCli {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            jwt_store: JwtStore::new()?,
             config_store: ConfigStore::new()?,
             http_client: Client::new(),
         })
@@ -140,7 +124,6 @@ impl NablaCli {
 
     pub async fn handle_command(&mut self, command: Commands) -> Result<()> {
         match command {
-            Commands::Auth { args } => self.handle_auth_args(args),
             Commands::Config { command } => self.handle_config_command(command),
             Commands::Binary { command } => self.handle_binary_command(command).await,
             Commands::Diff { file1, file2 } => self.handle_diff_command(&file1, &file2).await,
@@ -152,7 +135,6 @@ impl NablaCli {
                 self.handle_chat_command(&file, &message, provider.as_deref())
                     .await
             }
-            Commands::Upgrade => self.handle_upgrade_command(),
             Commands::Server { port } => self.handle_server_command(port).await,
         }
     }
@@ -270,11 +252,6 @@ impl NablaCli {
     fn print_help(&self) {
         println!("Available Commands:");
         println!();
-        println!("🔐 Authentication:");
-        println!("  nabla auth upgrade      - Upgrade your plan");
-        println!("  nabla auth status       - Check authentication status");
-        println!("  nabla auth --set-jwt <token> - Set JWT token for authentication");
-        println!();
         println!("⚙️  Configuration:");
         println!("  nabla config get <key>      - Get configuration value");
         println!("  nabla config set <key> <val> - Set configuration value");
@@ -283,30 +260,22 @@ impl NablaCli {
         println!();
         println!("🔍 Binary Analysis:");
         println!("  nabla binary analyze <file>  - Analyze a binary file");
-        println!("  nabla binary attest --signing-key <key> <file> - Create signed attestation");
         println!("  nabla binary check-cves <file> - Check for CVEs");
         println!();
         println!("🔍 Comparison:");
         println!("  nabla diff <file1> <file2>   - Compare two binaries");
         println!();
-        println!("💬 Chat (Premium Feature):");
+        println!("💬 Chat:");
         println!("  nabla chat <message>         - Chat about analysis");
-        println!();
-        println!("🚀 Upgrade:");
-        println!("  nabla upgrade               - Upgrade to AWS Marketplace plan");
         println!();
         println!("🖥️  Server:");
         println!("  nabla server --port <port>  - Start HTTP server (default: 8080)");
         println!();
-        println!("💡 Tip: Run 'nabla upgrade' to unlock premium features!");
     }
 
     async fn handle_binary_command(&mut self, command: BinaryCommands) -> Result<()> {
         match command {
             BinaryCommands::Analyze { file } => self.handle_analyze_command(&file).await,
-            BinaryCommands::Attest { file, signing_key } => {
-                self.handle_attest_command(&file, signing_key).await
-            }
             BinaryCommands::CheckCves { file } => self.handle_check_cves_command(&file).await,
         }
     }
@@ -316,7 +285,6 @@ impl NablaCli {
 
         println!("🔍 Analyzing binary: {}", validated_path.display());
 
-        let jwt_data = self.jwt_store.load_jwt().ok().flatten();
         let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/analyze", base_url);
 
@@ -335,10 +303,7 @@ impl NablaCli {
         let part = multipart::Part::bytes(file_content).file_name(file_name);
         let form = multipart::Form::new().part("file", part);
 
-        let mut request = self.http_client.post(validated_url.to_string());
-        if let Some(jwt) = jwt_data.as_ref() {
-            request = request.bearer_auth(&jwt.token);
-        }
+        let request = self.http_client.post(validated_url.to_string());
 
         let response = request.multipart(form).send().await?;
         let result = response.json::<serde_json::Value>().await?;
@@ -349,84 +314,8 @@ impl NablaCli {
         Ok(())
     }
 
-    async fn handle_attest_command(&mut self, file_path: &str, signing_key: String) -> Result<()> {
-        let jwt_data = self.jwt_store.load_jwt()?
-            .ok_or_else(|| anyhow::anyhow!("Authentication required for binary attestation. Run 'nabla auth --set-jwt <token>' or 'nabla upgrade'"))?;
-
-        let validated_file_path = validate_file_path(file_path)?;
-        let validated_key_path = validate_file_path(&signing_key)?;
-
-        println!("🔐 Attesting binary: {}", validated_file_path.display());
-
-        let base_url = self.config_store.get_base_url()?;
-        let url = format!("{}/binary/attest", base_url);
-
-        let file_content = std::fs::read(&validated_file_path)?;
-        let file_name = validated_file_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let signing_key_content = std::fs::read(&validated_key_path)?;
-
-        println!("🔄 Uploading to attestation endpoint...");
-
-        let ssrf_validator = SSRFValidator::new();
-        let validated_url = ssrf_validator.validate_url(&url)?;
-
-        let file_part = multipart::Part::bytes(file_content.clone()).file_name(file_name.clone());
-        let key_part = multipart::Part::bytes(signing_key_content).file_name("key.pem");
-        let form = multipart::Form::new()
-            .part("file", file_part)
-            .part("signing_key", key_part);
-
-        let response = self
-            .http_client
-            .post(validated_url.to_string())
-            .bearer_auth(&jwt_data.token)
-            .multipart(form)
-            .send()
-            .await?;
-        let result = response.json::<serde_json::Value>().await?;
-
-        // Mock attestation using SHA-256
-        let mut hasher = Sha256::new();
-        hasher.update(&file_content);
-        let hash = hasher.finalize();
-        let attestation = json!({
-            "_type": "https://in-toto.io/Statement/v0.1",
-            "subject": [{
-                "name": file_name,
-                "digest": {
-                    "sha256": format!("{:x}", hash)
-                }
-            }],
-            "predicateType": "https://nabla.sh/attestation/v0.1",
-            "predicate": {
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "analysis": {
-                    "format": "ELF",
-                    "architecture": "x86_64",
-                    "security_score": 85
-                }
-            }
-        });
-
-        println!("✅ Attestation complete!");
-        println!(
-            "Results: {}",
-            serde_json::to_string_pretty(&json!({
-                "analysis": result,
-                "attestation": attestation
-            }))?
-        );
-
-        Ok(())
-    }
-
     async fn handle_check_cves_command(&mut self, file_path: &str) -> Result<()> {
         let validated_path = validate_file_path(file_path)?;
-        let jwt_data = self.jwt_store.load_jwt().ok().flatten();
 
         println!("🔍 Checking CVEs for: {}", validated_path.display());
 
@@ -448,10 +337,7 @@ impl NablaCli {
         let part = multipart::Part::bytes(file_content).file_name(file_name);
         let form = multipart::Form::new().part("file", part);
 
-        let mut request = self.http_client.post(validated_url.to_string());
-        if let Some(jwt) = jwt_data.as_ref() {
-            request = request.bearer_auth(&jwt.token);
-        }
+        let request = self.http_client.post(validated_url.to_string());
 
         let response = request.multipart(form).send().await?;
         let result = response.json::<serde_json::Value>().await?;
@@ -465,7 +351,6 @@ impl NablaCli {
     async fn handle_diff_command(&mut self, file1: &str, file2: &str) -> Result<()> {
         let validated_path1 = validate_file_path(file1)?;
         let validated_path2 = validate_file_path(file2)?;
-        let jwt_data = self.jwt_store.load_jwt().ok().flatten();
 
         println!(
             "🔍 Comparing binaries: {} vs {}",
@@ -500,10 +385,7 @@ impl NablaCli {
             .part("file1", file1_part)
             .part("file2", file2_part);
 
-        let mut request = self.http_client.post(validated_url.to_string());
-        if let Some(jwt) = jwt_data.as_ref() {
-            request = request.bearer_auth(&jwt.token);
-        }
+        let request = self.http_client.post(validated_url.to_string());
 
         let response = request.multipart(form).send().await?;
         let result = response.json::<serde_json::Value>().await?;
@@ -573,11 +455,6 @@ impl NablaCli {
 
         let mut request = self.http_client.post(validated_url.to_string());
 
-        // Only add JWT auth if we have it (for enterprise features)
-        if let Some(jwt_data) = self.jwt_store.load_jwt()? {
-            request = request.bearer_auth(&jwt_data.token);
-        }
-
         let response = request.json(&request_body).send().await?;
 
         if !response.status().is_success() {
@@ -599,53 +476,6 @@ impl NablaCli {
         }
 
         Ok(())
-    }
-
-    fn handle_upgrade_command(&mut self) -> Result<()> {
-        if let Some(_jwt_data) = self.jwt_store.load_jwt()? {
-            println!("✅ You are already authenticated!");
-            println!();
-            println!("💡 You can use the CLI to analyze binaries:");
-            println!("  nabla binary analyze /path/to/binary");
-            return Ok(());
-        }
-
-        self.show_upgrade_message();
-        Ok(())
-    }
-
-    fn show_upgrade_message(&self) {
-        let scheduling_url = "https://cal.com/team/atelier-logos/platform-intro";
-
-        println!("🚀 Ready to upgrade to Nabla Pro?");
-        println!();
-        println!("Let's discuss the perfect plan for your security needs:");
-        println!("  • Binary analysis with AI-powered insights");
-        println!("  • Signed attestation and compliance features");
-        println!("  • Custom deployment and enterprise integrations");
-        println!("  • Dedicated support and training");
-        println!();
-
-        #[cfg(feature = "cloud")]
-        {
-            if let Err(e) = webbrowser::open(scheduling_url) {
-                println!("❌ Could not open browser automatically: {}", e);
-                println!("Please visit: {}", scheduling_url);
-            } else {
-                println!("🌐 Opening scheduling page in your browser...");
-                println!("📅 Schedule your demo: {}", scheduling_url);
-            }
-        }
-
-        #[cfg(not(feature = "cloud"))]
-        {
-            println!("📅 Schedule your demo: {}", scheduling_url);
-            println!("💡 Copy and paste this link into your browser to get started.");
-        }
-
-        println!();
-        println!("After our call, you'll receive a token to get started:");
-        println!("  nabla auth --set-jwt <YOUR_TOKEN>");
     }
 
     async fn handle_server_command(&self, port: u16) -> Result<()> {
