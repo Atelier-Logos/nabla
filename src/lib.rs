@@ -1,5 +1,4 @@
 // src/lib.rs
-use std::sync::Arc;
 pub mod binary;
 pub mod config;
 pub mod middleware;
@@ -32,11 +31,11 @@ pub mod server {
             http::{Method, header},
             routing::post,
         };
-        use base64::Engine;
+        
         use dotenvy::dotenv;
-        use std::sync::Arc;
+        
         use tower_http::cors::{Any, CorsLayer};
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+        
 
         dotenv().ok();
         let config = crate::Config::from_env()?;
@@ -68,8 +67,7 @@ pub mod server {
                 "/binary/analyze",
                 post(crate::routes::binary::upload_and_analyze_binary),
             )
-            .route("/binary/diff", post(crate::routes::binary::diff_binaries))
-            .route("/binary/check-cves", post(crate::routes::binary::check_cve));
+            .route("/binary/diff", post(crate::routes::binary::diff_binaries));
 
         let app = Router::new()
             .merge(public_routes)

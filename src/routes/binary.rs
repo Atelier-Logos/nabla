@@ -13,7 +13,7 @@ use uuid::Uuid;
 // Removed custom ResponseJson type alias
 use crate::{
     AppState,
-    binary::{BinaryAnalysis, ScanResult, analyze_binary, scan_binary},
+    binary::{BinaryAnalysis, analyze_binary},
 };
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
@@ -128,11 +128,6 @@ pub struct BinaryUploadResponse {
 pub struct ErrorResponse {
     pub error: String,
     pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CveScanResponse {
-    pub scan_result: ScanResult,
 }
 
 pub async fn health_check() -> Json<serde_json::Value> {
@@ -259,83 +254,6 @@ pub async fn upload_and_analyze_binary(
 }
 
 
-
-pub async fn check_cve(
-    State(state): State<AppState>,
-    mut multipart: Multipart,
-) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
-    tracing::info!("check_cve handler called");
-
-    let mut contents = vec![];
-    let mut file_name = "uploaded.bin".to_string();
-
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        tracing::error!("Error parsing multipart: {}", e);
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "multipart_error".to_string(),
-                message: format!("Failed to parse multipart form: {}", e),
-            }),
-        )
-    })? {
-        tracing::info!("Found field in multipart: {:?}", field.name());
-
-        if let Some(name) = field.file_name() {
-            file_name = name.to_string();
-            tracing::info!("Uploaded file: {}", file_name);
-        }
-
-        contents = field
-            .bytes()
-            .await
-            .map_err(|e| {
-                tracing::error!("Error reading file: {}", e);
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorResponse {
-                        error: "read_error".to_string(),
-                        message: format!("Failed to read file contents: {}", e),
-                    }),
-                )
-            })?
-            .to_vec();
-    }
-
-    if contents.is_empty() {
-        tracing::warn!("No file content provided");
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "empty_file".to_string(),
-                message: "No file content provided".to_string(),
-            }),
-        ));
-    }
-
-    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
-        tracing::error!("Binary analysis failed: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "analysis_error".to_string(),
-                message: format!("Failed to analyze binary: {}", e),
-            }),
-        )
-    })?;
-
-    tracing::info!("Binary analysis complete: {:?}", analysis);
-
-    let scan_result = scan_binary(&analysis);
-    tracing::info!(
-        "OSS vuln scan complete. {} vulnerability findings, {} security findings",
-        scan_result.vulnerability_findings.len(),
-        scan_result.security_findings.len()
-    );
-    let response_json = serde_json::to_value(scan_result).unwrap_or_default();
-
-    Ok(Json(response_json))
-}
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(

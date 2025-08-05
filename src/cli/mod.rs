@@ -2,7 +2,6 @@ use anyhow::Result;
 use clap::Subcommand;
 use reqwest::{Client, multipart};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 mod config;
@@ -96,9 +95,6 @@ pub enum Commands {
 #[derive(Subcommand)]
 pub enum BinaryCommands {
     Analyze {
-        file: String,
-    },
-    CheckCves {
         file: String,
     },
 }
@@ -260,7 +256,6 @@ impl NablaCli {
         println!();
         println!("🔍 Binary Analysis:");
         println!("  nabla binary analyze <file>  - Analyze a binary file");
-        println!("  nabla binary check-cves <file> - Check for CVEs");
         println!();
         println!("🔍 Comparison:");
         println!("  nabla diff <file1> <file2>   - Compare two binaries");
@@ -276,7 +271,6 @@ impl NablaCli {
     async fn handle_binary_command(&mut self, command: BinaryCommands) -> Result<()> {
         match command {
             BinaryCommands::Analyze { file } => self.handle_analyze_command(&file).await,
-            BinaryCommands::CheckCves { file } => self.handle_check_cves_command(&file).await,
         }
     }
 
@@ -309,40 +303,6 @@ impl NablaCli {
         let result = response.json::<serde_json::Value>().await?;
 
         println!("✅ Analysis complete!");
-        println!("Results: {}", serde_json::to_string_pretty(&result)?);
-
-        Ok(())
-    }
-
-    async fn handle_check_cves_command(&mut self, file_path: &str) -> Result<()> {
-        let validated_path = validate_file_path(file_path)?;
-
-        println!("🔍 Checking CVEs for: {}", validated_path.display());
-
-        let base_url = self.config_store.get_base_url()?;
-        let url = format!("{}/binary/check-cves", base_url);
-
-        let file_content = std::fs::read(&validated_path)?;
-        let file_name = validated_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        println!("🔄 Uploading to CVE check endpoint...");
-
-        let ssrf_validator = SSRFValidator::new();
-        let validated_url = ssrf_validator.validate_url(&url)?;
-
-        let part = multipart::Part::bytes(file_content).file_name(file_name);
-        let form = multipart::Form::new().part("file", part);
-
-        let request = self.http_client.post(validated_url.to_string());
-
-        let response = request.multipart(form).send().await?;
-        let result = response.json::<serde_json::Value>().await?;
-
-        println!("✅ CVE check complete!");
         println!("Results: {}", serde_json::to_string_pretty(&result)?);
 
         Ok(())
@@ -453,7 +413,7 @@ impl NablaCli {
             request_body["model_path"] = json!(model);
         }
 
-        let mut request = self.http_client.post(validated_url.to_string());
+        let request = self.http_client.post(validated_url.to_string());
 
         let response = request.json(&request_body).send().await?;
 
