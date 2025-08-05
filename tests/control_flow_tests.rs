@@ -49,9 +49,9 @@ mod control_flow_tests {
     }
 
     #[test]
-    fn test_build_from_analysis() {
+    fn test_build_cfg() {
         let analysis = create_test_analysis();
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
 
         // Should succeed even with minimal test data
         assert!(result.is_ok());
@@ -62,23 +62,23 @@ mod control_flow_tests {
     }
 
     #[test]
-    fn test_build_from_analysis_with_empty_data() {
+    fn test_build_cfg_with_empty_data() {
         let mut analysis = create_test_analysis();
         analysis.binary_data = None;
         analysis.code_sections = vec![];
 
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
 
         // Should handle missing data gracefully
         assert!(result.is_ok() || result.is_err()); // Either outcome is acceptable
     }
 
     #[test]
-    fn test_build_from_analysis_with_invalid_entry_point() {
+    fn test_build_cfg_with_invalid_entry_point() {
         let mut analysis = create_test_analysis();
         analysis.entry_point = Some("invalid".to_string());
 
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
 
         // Should handle invalid entry point gracefully
         assert!(result.is_ok() || result.is_err()); // Either outcome is acceptable
@@ -91,14 +91,14 @@ mod control_flow_tests {
         analysis.format = "pe".to_string();
         analysis.binary_data = Some(vec![0x4d, 0x5a]); // PE header
 
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
         assert!(result.is_ok() || result.is_err()); // Either outcome is acceptable
 
         // Test with unknown format
         analysis.format = "unknown".to_string();
         analysis.binary_data = Some(vec![0x00, 0x01, 0x02, 0x03]);
 
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
         assert!(result.is_ok() || result.is_err()); // Either outcome is acceptable
     }
 
@@ -126,7 +126,7 @@ mod control_flow_tests {
     #[test]
     fn test_call_graph_analysis() {
         let analysis = create_test_analysis();
-        let cfg = ControlFlowGraph::build_from_analysis(&analysis).unwrap();
+        let cfg = ControlFlowGraph::build_cfg(&analysis).unwrap();
 
         // Test call graph analysis
         let _call_graph = cfg.analyze_call_graph(&analysis);
@@ -224,7 +224,7 @@ mod control_flow_tests {
             },
         ];
 
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
         assert!(result.is_ok());
     }
 
@@ -241,7 +241,7 @@ mod control_flow_tests {
         analysis.size_bytes = 10004;
 
         let start = std::time::Instant::now();
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
         let duration = start.elapsed();
 
         // Should complete in reasonable time
@@ -263,7 +263,7 @@ mod control_flow_tests {
         let handles: Vec<_> = (0..4)
             .map(|_| {
                 let analysis_clone = analysis.clone();
-                thread::spawn(move || ControlFlowGraph::build_from_analysis(&analysis_clone))
+                thread::spawn(move || ControlFlowGraph::build_cfg(&analysis_clone))
             })
             .collect();
 
@@ -281,7 +281,7 @@ mod control_flow_tests {
         // Create multiple CFGs to test memory usage
         let mut cfgs = Vec::new();
         for _ in 0..10 {
-            if let Ok(cfg) = ControlFlowGraph::build_from_analysis(&analysis) {
+            if let Ok(cfg) = ControlFlowGraph::build_cfg(&analysis) {
                 cfgs.push(cfg);
             }
         }
@@ -292,7 +292,7 @@ mod control_flow_tests {
     #[test]
     fn test_cfg_construction_from_secure_module() {
         let analysis = create_test_analysis();
-        let result = ControlFlowGraph::build_from_analysis(&analysis);
+        let result = ControlFlowGraph::build_cfg(&analysis);
 
         // Should succeed even with minimal test data
         assert!(result.is_ok());
@@ -304,7 +304,7 @@ mod control_flow_tests {
     #[test]
     fn test_call_graph_analysis_from_secure_module() {
         let analysis = create_test_analysis();
-        let cfg = ControlFlowGraph::build_from_analysis(&analysis).unwrap();
+        let cfg = ControlFlowGraph::build_cfg(&analysis).unwrap();
         let _call_graph = cfg.analyze_call_graph(&analysis);
 
         // Should complete without panicking. We don't assert on content as it depends on disassembly.
@@ -313,7 +313,7 @@ mod control_flow_tests {
     #[test]
     fn test_exploitability_analysis_from_secure_module() {
         let analysis = create_test_analysis();
-        let cfg = ControlFlowGraph::build_from_analysis(&analysis).unwrap();
+        let cfg = ControlFlowGraph::build_cfg(&analysis).unwrap();
 
         let sources = vec!["main".to_string()];
         let result = ExploitabilityAnalysis::analyze(&cfg, &sources, "vulnerable_func");

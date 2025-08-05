@@ -633,7 +633,7 @@ fn perform_exploitability_assessments(
     }
 
     // Build control flow graph for exploitability analysis (real logic)
-    if let Ok(cfg) = ControlFlowGraph::build_from_analysis(analysis) {
+    if let Ok(cfg) = ControlFlowGraph::build_cfg(analysis) {
         let sources: Vec<String> = analysis
             .imports
             .iter()
