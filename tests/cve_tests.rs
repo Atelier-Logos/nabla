@@ -52,6 +52,9 @@ fn test_scan_binary_vulnerabilities() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let matches = scan_binary_vulnerabilities(&analysis);
@@ -83,6 +86,9 @@ fn test_enterprise_scan_binary_vulnerabilities() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let enterprise_matches = enterprise_scan_binary_vulnerabilities(&analysis);
@@ -120,6 +126,9 @@ fn test_enterprise_vs_regular_scan_differences() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let regular_matches = scan_binary_vulnerabilities(&analysis);

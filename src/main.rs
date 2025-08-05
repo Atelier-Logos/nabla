@@ -25,7 +25,7 @@ pub mod server {
     pub use crate::run_server;
 }
 
-use enterprise::providers::InferenceManager;
+
 
 use config::Config;
 use middleware::validate_license_jwt;
@@ -38,7 +38,7 @@ pub struct AppState {
     pub base_url: String,
     pub enterprise_features: bool, // Add this field to track enterprise features
     pub license_jwt_secret: Arc<[u8; 32]>,
-    pub inference_manager: Arc<InferenceManager>,
+    
 }
 
 pub async fn run_server(port: u16) -> anyhow::Result<()> {
@@ -61,11 +61,8 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     let license_jwt_secret = Arc::new(secret_array);
     // Initialize tracing
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "nabla=debug,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::new("nabla=debug,tower_http=debug"))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     // Load configuration
@@ -83,8 +80,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
     
-    // Initialize inference manager
-    let inference_manager = Arc::new(InferenceManager::new());
+    
 
     // Build the shared application state
     let state = AppState {
@@ -93,7 +89,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         base_url,
         enterprise_features: config.enterprise_features,
         license_jwt_secret,
-        inference_manager,
+        
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
@@ -112,7 +108,7 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
             post(enterprise::attestation::attest_binary),
         )
         .route("/binary/check-cves", post(routes::check_cve))
-        .route("/binary/chat", post(routes::chat_with_binary))
+        
         .route_layer(auth_layer);
 
     // Build the main app router

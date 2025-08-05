@@ -1,18 +1,15 @@
 // src/routes/binary.rs
 use anyhow::Result;
 use axum::{
-    extract::{Multipart, Request, State},
+    extract::{Multipart, State},
     http::StatusCode,
     response::Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-// Add this line to import the inference module
-use crate::enterprise::providers::{
-    GenerationOptions, GenerationResponse, HTTPProvider, InferenceProvider,
-};
+
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
@@ -23,6 +20,8 @@ use crate::{
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
 /// Returns the canonicalized path if valid, or an error if the path is unsafe
+/// This function is kept available for potential future web endpoints that need file path validation
+#[allow(dead_code)]
 pub fn validate_file_path(
     file_path: &str,
 ) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
@@ -138,24 +137,7 @@ pub struct CveScanResponse {
     pub matches: Vec<VulnerabilityMatch>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ChatRequest {
-    pub file_path: String, // Path to the file instead of raw content
-    pub question: String,
-    pub model_path: Option<String>,     // For local GGUF files
-    pub hf_repo: Option<String>,        // For remote HF repos
-    pub provider: String,               // "http" for HTTP provider
-    pub inference_url: Option<String>,  // URL for the inference server
-    pub provider_token: Option<String>, // Token for third-party authentication
-    pub options: Option<GenerationOptions>,
-}
 
-#[derive(Debug, Serialize)]
-pub struct ChatResponse {
-    pub answer: String,
-    pub model_used: String,
-    pub tokens_used: usize,
-}
 
 pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({
@@ -500,226 +482,4 @@ pub async fn diff_binaries(
     );
 
     Ok(Json(meta.into()))
-}
-
-#[axum::debug_handler]
-pub async fn chat_with_binary(
-    State(_state): State<AppState>,
-    req: Request,
-) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Check if chat is enabled based on deployment configuration
-    if !_state.config.enterprise_features {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(ErrorResponse {
-                error: "feature_disabled".to_string(),
-                message: "Chat feature requires NablaSecure deployment".to_string(),
-            }),
-        ));
-    }
-
-    // Extract JSON body manually
-    let (_parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_body".to_string(),
-                    message: "Failed to read request body".to_string(),
-                }),
-            ));
-        }
-    };
-
-    let request: ChatRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(req) => req,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_json".to_string(),
-                    message: "Invalid JSON in request body".to_string(),
-                }),
-            ));
-        }
-    };
-
-    // Chat is always an enterprise feature - already checked above
-    // Validate and sanitize the file path using the helper function
-    let canonical_path = validate_file_path(&request.file_path)?;
-
-    // Read the file using the validated canonicalized path
-    let file_content = tokio::fs::read(&canonical_path).await.map_err(|_e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "file_read_error".to_string(),
-                message: "Failed to read file".to_string(),
-            }),
-        )
-    })?;
-
-    // Extract filename safely from the validated canonical path
-    let file_name = canonical_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    let analysis = analyze_binary(&file_name, &file_content)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
-
-    // Store model info before moving values
-    let model_used = request
-        .hf_repo
-        .as_ref()
-        .or(request.model_path.as_ref())
-        .map(|s| s.clone())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    // Handle inference with HTTP provider
-    let response = match request.provider.as_str() {
-        "http" => {
-            let inference_url = request
-                .inference_url
-                .unwrap_or_else(|| "http://localhost:11434".to_string());
-
-            // Validate the inference URL for SSRF protection
-            let ssrf_validator = crate::ssrf_protection::SSRFValidator::new();
-            let validated_url = ssrf_validator.validate_url(&inference_url).map_err(|e| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorResponse {
-                        error: "ssrf_protection_violation".to_string(),
-                        message: format!("SSRF protection violation: {}", e),
-                    }),
-                )
-            })?;
-
-            let provider =
-                HTTPProvider::new(validated_url.to_string(), None, request.provider_token);
-
-            let mut options = request.options.unwrap_or_default();
-            options.model_path = request.model_path;
-            options.hf_repo = request.hf_repo;
-            // Note: options.model is already set from the request.options if provided
-
-            chat_with_provider(&analysis, &request.question, &provider, &options)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ErrorResponse {
-                            error: "inference_error".to_string(),
-                            message: format!("Failed to chat with binary: {}", e),
-                        }),
-                    )
-                })?
-        }
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_provider".to_string(),
-                    message: "Provider must be 'http'".to_string(),
-                }),
-            ));
-        }
-    };
-
-    Ok(Json(ChatResponse {
-        answer: response.text,
-        model_used,
-        tokens_used: response.tokens_used,
-    }))
-}
-
-async fn chat_with_provider(
-    analysis: &BinaryAnalysis,
-    user_question: &str,
-    provider: &dyn InferenceProvider,
-    options: &GenerationOptions,
-) -> Result<GenerationResponse, anyhow::Error> {
-    // Check if the question asks for JSON output
-    let is_json_request = user_question.to_lowercase().contains("json")
-        || user_question.to_lowercase().contains("sbom")
-        || user_question.to_lowercase().contains("cyclonedx");
-
-    let context = if is_json_request {
-        format!(
-            "Binary Analysis Context:\n\
-             - File: {}\n\
-             - Format: {}\n\
-             - Architecture: {}\n\
-             - Size: {} bytes\n\
-             - Linked Libraries: {}\n\
-             - Imports: {}\n\
-             - Exports: {}\n\
-             - Embedded Strings: {}\n\n\
-             User Question: {}\n\n\
-             CRITICAL: You must return ONLY raw JSON. Do NOT wrap it in quotes or escape it as a string. Return the actual JSON object directly. Do not include any explanations, markdown, or code blocks. The response should start with {{ and end with }}.",
-            analysis.file_name,
-            analysis.format,
-            analysis.architecture,
-            analysis.size_bytes,
-            analysis.linked_libraries.join(", "),
-            analysis.imports.join(", "),
-            analysis.exports.join(", "),
-            analysis.embedded_strings.join(", "),
-            user_question
-        )
-    } else {
-        format!(
-            "Binary Analysis Context:\n\
-         - File: {}\n\
-         - Format: {}\n\
-         - Architecture: {}\n\
-         - Size: {} bytes\n\
-         - Linked Libraries: {}\n\
-         - Imports: {}\n\
-         - Exports: {}\n\
-         - Embedded Strings: {}\n\n\
-         User Question: {}\n\n\
-         Please provide a helpful answer about this binary based on the analysis data.",
-            analysis.file_name,
-            analysis.format,
-            analysis.architecture,
-            analysis.size_bytes,
-            analysis.linked_libraries.join(", "),
-            analysis.imports.join(", "),
-            analysis.exports.join(", "),
-            analysis.embedded_strings.join(", "),
-            user_question
-        )
-    };
-
-    let mut response = provider
-        .generate(&context, options)
-        .await
-        .map_err(|e| anyhow::anyhow!("Inference failed: {}", e))?;
-
-    // Post-process JSON responses to handle cases where the model returns JSON as a string
-    if is_json_request {
-        let text = response.text.trim();
-        // If the response looks like a JSON string (starts and ends with quotes), try to parse it
-        if text.starts_with('"') && text.ends_with('"') {
-            if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(text) {
-                response.text = serde_json::to_string(&parsed_json)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))?;
-            }
-        }
-    }
-
-    Ok(response)
 }

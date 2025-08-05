@@ -46,7 +46,7 @@ static RATE_LIMITS: Lazy<DashMap<String, (u32, DateTime<Utc>)>> = Lazy::new(Dash
 impl PlanFeatures {
     pub fn default_oss() -> Self {
         Self {
-            chat_enabled: false,
+            chat_enabled: true,
             api_access: true,
             file_upload_limit_mb: 10,
             concurrent_requests: 1,

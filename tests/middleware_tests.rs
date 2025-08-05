@@ -32,7 +32,6 @@ async fn test_middleware_fips_mode_enabled() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -70,7 +69,6 @@ async fn test_middleware_fips_mode_disabled() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()

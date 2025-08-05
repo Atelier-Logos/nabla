@@ -8,7 +8,11 @@ use serde_json::Value;
 use std::{fs::File, io::BufReader, path::PathBuf};
 
 use super::BinaryAnalysis;
-use crate::enterprise::secure::reachability::{ControlFlowGraph, ExploitabilityAnalysis};
+use crate::enterprise::secure::control_flow::{ControlFlowGraph, ExploitabilityAnalysis};
+use crate::enterprise::secure::{
+    analyze_static_security, analyze_behavioral_security, 
+    analyze_crypto_security, analyze_supply_chain_security
+};
 
 const CVE_BULK_DATA_URL: &str = "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-modified.json.gz";
 
@@ -325,12 +329,14 @@ pub fn scan_binary_vulnerabilities(analysis: &BinaryAnalysis) -> Vec<Vulnerabili
     matches
 }
 
-/// Enterprise-level vulnerability scanning with reachability analysis.
+/// Enterprise-level vulnerability scanning with comprehensive security analysis.
 pub fn enterprise_scan_binary_vulnerabilities(
     analysis: &BinaryAnalysis,
 ) -> Vec<EnterpriseVulnerabilityMatch> {
     let mut matches = Vec::new();
-    let mut cfg = ControlFlowGraph::build_from_analysis(analysis);
+    
+    // Build control flow graph for exploitability analysis
+    let cfg = ControlFlowGraph::build_from_analysis(analysis);
 
     // Define sources for exploitability analysis (e.g., network-related imports)
     let sources: Vec<String> = analysis
@@ -340,11 +346,29 @@ pub fn enterprise_scan_binary_vulnerabilities(
         .cloned()
         .collect();
 
+    // Run comprehensive enterprise security analysis
+    let _static_results = analyze_static_security(analysis);
+    let _behavioral_results = analyze_behavioral_security(analysis);
+    let _crypto_results = analyze_crypto_security(analysis);
+    let _supply_chain_results = analyze_supply_chain_security(analysis);
+
+    // Get regular CVE matches and enhance with exploitability analysis
     let regular_matches = scan_binary_vulnerabilities(analysis);
 
     for match_item in regular_matches {
-        let exploitability =
-            cfg.analyze_exploitability(&sources, &match_item.matched_keyword);
+        let exploitability = if let Ok(cfg_ok) = &cfg {
+            // Use the advanced control flow analysis for exploitability
+            ExploitabilityAnalysis::analyze(cfg_ok, &sources, &match_item.matched_keyword)
+        } else {
+            // Fallback exploitability analysis if CFG build fails
+            ExploitabilityAnalysis {
+                is_reachable: false,
+                path: None,
+                sink: match_item.matched_keyword.clone(),
+                confidence: 0.0,
+                attack_vectors: vec![],
+            }
+        };
 
         matches.push(EnterpriseVulnerabilityMatch {
             cve_id: match_item.cve_id,

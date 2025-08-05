@@ -79,6 +79,9 @@ fn create_test_analysis() -> BinaryAnalysis {
         }),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]), // ELF magic bytes
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     }
 }
 

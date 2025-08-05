@@ -3189,11 +3189,10 @@ dependencies = [
 
 [[package]]
 name = "nabla-cli"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
- "async-trait",
  "axum 0.7.9",
  "axum-test",
  "base64 0.21.7",

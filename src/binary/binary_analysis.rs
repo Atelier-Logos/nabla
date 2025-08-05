@@ -60,6 +60,9 @@ pub async fn analyze_binary(
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
             sbom: None,
+            binary_data: Some(contents.to_vec()),
+            entry_point: None,
+            code_sections: Vec::new(),
         };
         
         analyze_raw_firmware_blob(&mut analysis, contents)?;
@@ -115,6 +118,9 @@ pub async fn analyze_binary(
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
         sbom: None,
+        binary_data: Some(contents.to_vec()),
+        entry_point: None,
+        code_sections: Vec::new(),
     };
 
     // Try different parsing strategies based on file type and magic bytes
@@ -406,6 +412,12 @@ fn analyze_macho(
             .push(serde_json::Value::String(format!("{:?}", lc.command)));
     }
 
+    // Extract entry point from Mach-O header
+    if macho.entry != 0 {
+        analysis.entry_point = Some(format!("0x{:08X}", macho.entry));
+        tracing::debug!("Mach-O entry point: 0x{:08X}", macho.entry);
+    }
+
     // Detect static linking
     analysis.static_linked = macho.libs.is_empty() && symbol_set.iter().any(|s| s.contains("main"));
 
@@ -521,6 +533,12 @@ fn analyze_elf(analysis: &mut BinaryAnalysis, elf: &Elf, contents: &[u8]) -> any
         analysis.embedded_strings.push(lib.to_string());
     }
 
+    // Extract entry point
+    if elf.header.e_entry != 0 {
+        analysis.entry_point = Some(format!("0x{:08X}", elf.header.e_entry));
+        tracing::debug!("ELF entry point: 0x{:08X}", elf.header.e_entry);
+    }
+
     // Determine if statically linked
     analysis.static_linked =
         elf.libraries.is_empty() && elf.header.e_type == goblin::elf::header::ET_EXEC;
@@ -568,6 +586,18 @@ fn analyze_pe(analysis: &mut BinaryAnalysis, pe: &PE, _contents: &[u8]) -> anyho
             analysis.linked_libraries.push(import.dll.to_string());
             // Include DLL name in embedded strings so version like "vcruntime140.dll" can be parsed
             analysis.embedded_strings.push(import.dll.to_string());
+        }
+    }
+
+    // Extract entry point
+    if let Some(optional_header) = &pe.header.optional_header {
+        let entry_point = optional_header.standard_fields.address_of_entry_point;
+        if entry_point != 0 {
+            // Add image base to get virtual address  
+            let image_base = optional_header.windows_fields.image_base;
+            let virtual_entry_point = image_base + entry_point as u64;
+            analysis.entry_point = Some(format!("0x{:08X}", virtual_entry_point));
+            tracing::debug!("PE entry point: 0x{:08X} (RVA: 0x{:08X})", virtual_entry_point, entry_point);
         }
     }
 
@@ -802,6 +832,7 @@ fn analyze_intel_hex(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::
                     let start_addr = (cs << 4) + ip;
                     start_address = Some(start_addr);
                     entry_points.push(format!("0x{:08X}", start_addr));
+                    analysis.entry_point = Some(format!("0x{:08X}", start_addr));
                     tracing::debug!("Start segment address: CS=0x{:04X}, IP=0x{:04X}", cs, ip);
                 }
             }
@@ -819,6 +850,7 @@ fn analyze_intel_hex(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::
                                     ((data_bytes[2] as u32) << 8) | (data_bytes[3] as u32);
                     start_address = Some(start_addr);
                     entry_points.push(format!("0x{:08X}", start_addr));
+                    analysis.entry_point = Some(format!("0x{:08X}", start_addr));
                     tracing::debug!("Start linear address: 0x{:08X}", start_addr);
                 }
             }
@@ -993,6 +1025,7 @@ fn analyze_srec(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                     if let Ok(address) = u32::from_str_radix(&line[4..12], 16) {
                         start_address = Some(address);
                         entry_points.push(format!("0x{:08X}", address));
+                        analysis.entry_point = Some(format!("0x{:08X}", address));
                     }
                 }
             }
@@ -1002,6 +1035,7 @@ fn analyze_srec(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                     if let Ok(address) = u32::from_str_radix(&line[4..10], 16) {
                         start_address = Some(address & 0x00FFFFFF);
                         entry_points.push(format!("0x{:06X}", address & 0x00FFFFFF));
+                        analysis.entry_point = Some(format!("0x{:06X}", address & 0x00FFFFFF));
                     }
                 }
             }
@@ -1011,6 +1045,7 @@ fn analyze_srec(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyhow::Resul
                     if let Ok(address) = u16::from_str_radix(&line[4..8], 16) {
                         start_address = Some(address as u32);
                         entry_points.push(format!("0x{:04X}", address));
+                        analysis.entry_point = Some(format!("0x{:04X}", address));
                     }
                 }
             }
@@ -1156,6 +1191,7 @@ fn analyze_arm_cortex_m(analysis: &mut BinaryAnalysis, contents: &[u8]) -> anyho
             
             if actual_reset_addr > 0 && actual_reset_addr < 0x08100000 {
                 reset_handler = Some(actual_reset_addr);
+                analysis.entry_point = Some(format!("0x{:08X}", actual_reset_addr));
                 
                 // Try to disassemble first few instructions at reset handler
                 let mut reset_analysis = serde_json::json!({

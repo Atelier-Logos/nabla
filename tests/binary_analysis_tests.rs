@@ -105,6 +105,9 @@ async fn test_binary_analysis_struct() {
         metadata: serde_json::json!({"test": "value"}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     assert_eq!(analysis.file_name, "test.bin");
@@ -146,6 +149,9 @@ fn test_binary_analysis_serialization() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     // Test serialization
@@ -187,6 +193,9 @@ fn test_binary_analysis_debug() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let debug_str = format!("{:?}", analysis);
@@ -218,6 +227,9 @@ fn test_binary_analysis_clone() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let cloned_analysis = analysis.clone();

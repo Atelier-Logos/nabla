@@ -55,6 +55,9 @@ fn test_build_from_analysis() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let cfg = ControlFlowGraph::build_from_analysis(&analysis);
@@ -91,6 +94,9 @@ fn test_exploitability_analysis_reachable() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let mut cfg = ControlFlowGraph::build_from_analysis(&analysis);
@@ -127,6 +133,9 @@ fn test_exploitability_analysis_unreachable() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let mut cfg = ControlFlowGraph::build_from_analysis(&analysis);
@@ -163,6 +172,9 @@ fn test_exploitability_analysis_empty_sources() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some(0x1000),
+        code_sections: vec![],
     };
 
     let mut cfg = ControlFlowGraph::build_from_analysis(&analysis);

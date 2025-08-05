@@ -11,7 +11,7 @@ mod jwt_store;
 
 use crate::ssrf_protection::SSRFValidator;
 pub use auth::AuthArgs;
-pub use config::{ConfigCommands, ConfigStore};
+pub use config::{ConfigCommands, ConfigStore, LLMProvidersConfig, LLMProvider};
 pub use jwt_store::*;
 
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB limit
@@ -90,7 +90,10 @@ pub enum Commands {
         file2: String,
     },
     Chat {
+        file: String,
         message: String,
+        #[arg(long)]
+        provider: Option<String>, // Optional provider name, uses default if not specified
     },
     Upgrade,
     Server {
@@ -141,7 +144,7 @@ impl NablaCli {
             Commands::Config { command } => self.handle_config_command(command),
             Commands::Binary { command } => self.handle_binary_command(command).await,
             Commands::Diff { file1, file2 } => self.handle_diff_command(&file1, &file2).await,
-            Commands::Chat { message } => self.handle_chat_command(&message).await,
+            Commands::Chat { file, message, provider } => self.handle_chat_command(&file, &message, provider.as_deref()).await,
             Commands::Upgrade => self.handle_upgrade_command(),
             Commands::Server { port } => self.handle_server_command(port).await,
         }
@@ -173,6 +176,63 @@ impl NablaCli {
                         println!("  {}: {}", key, value);
                     }
                 }
+                Ok(())
+            }
+            ConfigCommands::AddProvider {
+                name,
+                provider_type,
+                api_key,
+                base_url,
+                model,
+                default,
+            } => {
+                let mut providers_config = LLMProvidersConfig::new()?;
+                let provider = LLMProvider {
+                    name: name.clone(),
+                    provider_type,
+                    api_key,
+                    base_url,
+                    model,
+                    default,
+                };
+                providers_config.add_provider(provider)?;
+                println!("✅ Added LLM provider: {}", name);
+                Ok(())
+            }
+            ConfigCommands::RemoveProvider { name } => {
+                let mut providers_config = LLMProvidersConfig::new()?;
+                providers_config.remove_provider(&name)?;
+                println!("✅ Removed LLM provider: {}", name);
+                Ok(())
+            }
+            ConfigCommands::ListProviders => {
+                let providers_config = LLMProvidersConfig::new()?;
+                let providers = providers_config.list_providers();
+                if providers.is_empty() {
+                    println!("No LLM providers configured.");
+                    println!();
+                    println!("💡 Add a provider with:");
+                    println!("  nabla config add-provider <name> --provider-type openai --base-url https://api.openai.com --api-key <your-key>");
+                } else {
+                    println!("Configured LLM providers:");
+                    for provider in providers {
+                        let default_marker = if provider.default { " (default)" } else { "" };
+                        let api_key_status = if provider.api_key.is_some() { "✅" } else { "❌" };
+                        println!("  {} {}{} - {} - Key: {}", 
+                            provider.name, 
+                            provider.provider_type,
+                            default_marker,
+                            provider.base_url,
+                            api_key_status
+                        );
+                    }
+                }
+                Ok(())
+            }
+            ConfigCommands::SetDefaultProvider { name } => {
+                let mut providers_config = LLMProvidersConfig::new()?;
+                providers_config.set_default_provider(&name)?;
+                println!("✅ Set default LLM provider: {}", name);
                 Ok(())
             }
         }
@@ -440,43 +500,81 @@ impl NablaCli {
         Ok(())
     }
 
-    async fn handle_chat_command(&mut self, message: &str) -> Result<()> {
-        let jwt_data = match self.jwt_store.load_jwt()? {
-            Some(data) => data,
-            None => {
-                println!("❌ Authentication required for chat functionality.");
-                println!();
-                self.show_upgrade_message();
-                return Ok(());
-            }
+    async fn handle_chat_command(&mut self, file_path: &str, message: &str, provider_name: Option<&str>) -> Result<()> {
+        // For OSS, we don't require JWT authentication - just check if providers are configured
+        let base_url = self.config_store.get_base_url()?;
+        
+        // Load LLM provider configuration
+        let providers_config = LLMProvidersConfig::new()?;
+        
+        let provider = if let Some(name) = provider_name {
+            providers_config.get_provider(name)
+                .ok_or_else(|| anyhow::anyhow!("Provider '{}' not found. Use 'nabla config list-providers' to see available providers.", name))?
+        } else {
+            providers_config.get_default_provider()
+                .ok_or_else(|| anyhow::anyhow!("No default provider configured. Use 'nabla config add-provider' to add one or specify --provider <name>"))?
         };
 
-        if !jwt_data.features.chat_enabled {
-            println!("❌ Chat feature not available in your current plan.");
-            println!();
-            self.show_upgrade_message();
-            return Ok(());
-        }
+        // Validate and read the file
+        let validated_path = validate_file_path(file_path)?;
+        let file_name = validated_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
 
-        println!("💬 Chat: {}", message);
+        println!("🔍 Analyzing file: {}", file_name);
+        println!("💬 Question: {}", message);
+        println!("🤖 Using provider: {} ({})", provider.name, provider.provider_type);
 
-        let base_url = self.config_store.get_base_url()?;
         let url = format!("{}/binary/chat", base_url);
-
         let ssrf_validator = SSRFValidator::new();
         let validated_url = ssrf_validator.validate_url(&url)?;
 
-        let response = self
-            .http_client
-            .post(validated_url.to_string())
-            .bearer_auth(&jwt_data.token)
-            .json(&json!({ "message": message }))
+        // Create request payload matching the API format
+        let mut request_body = json!({
+            "file_path": validated_path.to_string_lossy(),
+            "question": message,
+            "provider": "http", // Always use HTTP provider for configured providers
+            "inference_url": provider.base_url,
+        });
+
+        // Add API key if available
+        if let Some(api_key) = &provider.api_key {
+            request_body["provider_token"] = json!(api_key);
+        }
+
+        // Add model if specified
+        if let Some(model) = &provider.model {
+            request_body["model_path"] = json!(model);
+        }
+
+        let mut request = self.http_client.post(validated_url.to_string());
+        
+        // Only add JWT auth if we have it (for enterprise features)
+        if let Some(jwt_data) = self.jwt_store.load_jwt()? {
+            request = request.bearer_auth(&jwt_data.token);
+        }
+
+        let response = request
+            .json(&request_body)
             .send()
             .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!("Chat request failed: {}", error_text));
+        }
+
         let result = response.json::<serde_json::Value>().await?;
 
-        println!("✅ Chat response received!");
-        println!("Response: {}", serde_json::to_string_pretty(&result)?);
+        println!("✅ Analysis complete!");
+        if let Some(answer) = result.get("answer") {
+            println!("\n📝 Response:\n{}", answer.as_str().unwrap_or("No response"));
+        }
+        if let Some(model_used) = result.get("model_used") {
+            println!("\n🤖 Model: {}", model_used.as_str().unwrap_or("unknown"));
+        }
 
         Ok(())
     }
@@ -536,7 +634,7 @@ impl NablaCli {
         println!("  POST /binary/attest    - Binary attestation (Premium)");
         println!("  POST /binary/check-cves - CVE checking");
         println!("  POST /binary/diff      - Binary comparison");
-        println!("  POST /binary/chat      - AI chat (Premium)");
+        println!("  POST /binary/chat      - AI chat");
         println!();
         println!("💡 Use Ctrl+C to stop the server");
         println!();

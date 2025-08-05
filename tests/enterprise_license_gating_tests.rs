@@ -50,7 +50,6 @@ async fn test_oss_deployment_defaults_no_exploitability() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -68,7 +67,6 @@ async fn test_oss_deployment_defaults_no_exploitability() {
                 base_url: "http://localhost:8080".to_string(),
                 enterprise_features: false,
                 license_jwt_secret: Arc::new([0u8; 32]),
-                inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
             },
             validate_license_jwt,
         ));
@@ -108,7 +106,6 @@ async fn test_private_deployment_requires_jwt() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: Arc::new([0u8; 32]),
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -177,7 +174,6 @@ async fn test_valid_jwt_with_exploitability_analysis() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: secret,
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -255,7 +251,6 @@ async fn test_valid_jwt_without_exploitability_analysis() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: secret,
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -335,7 +330,6 @@ async fn test_expired_jwt() {
         base_url: "http://localhost:8080".to_string(),
         enterprise_features: config.enterprise_features,
         license_jwt_secret: secret,
-        inference_manager: Arc::new(nabla_cli::enterprise::providers::InferenceManager::new()),
     };
 
     let app = Router::new()
@@ -366,6 +360,6 @@ fn test_plan_features_default_oss() {
     assert!(!features.exploitability_analysis);
     assert!(features.vulnerability_scanning); // But should have basic vulnerability scanning
     assert!(features.api_access);
-    assert!(!features.chat_enabled);
+    assert!(features.chat_enabled);
     assert!(!features.signed_attestation);
 }
