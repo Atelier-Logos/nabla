@@ -25,8 +25,6 @@ pub mod server {
     pub use crate::run_server;
 }
 
-
-
 use config::Config;
 use middleware::validate_license_jwt;
 
@@ -38,7 +36,6 @@ pub struct AppState {
     pub base_url: String,
     pub enterprise_features: bool, // Add this field to track enterprise features
     pub license_jwt_secret: Arc<[u8; 32]>,
-    
 }
 
 pub async fn run_server(port: u16) -> anyhow::Result<()> {
@@ -61,7 +58,9 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
     let license_jwt_secret = Arc::new(secret_array);
     // Initialize tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new("nabla=debug,tower_http=debug"))
+        .with(tracing_subscriber::EnvFilter::new(
+            "nabla=debug,tower_http=debug",
+        ))
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
@@ -70,17 +69,15 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
 
     let base_url =
         std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
-    
+
     // Create HTTP client
     let client = reqwest::Client::new();
-    
+
     // Configure CORS
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
-    
-    
 
     // Build the shared application state
     let state = AppState {
@@ -89,7 +86,6 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
         base_url,
         enterprise_features: config.enterprise_features,
         license_jwt_secret,
-        
     };
     // Create middleware layer that validates API keys & enforces quotas
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_license_jwt);
@@ -108,7 +104,6 @@ pub async fn run_server(port: u16) -> anyhow::Result<()> {
             post(enterprise::attestation::attest_binary),
         )
         .route("/binary/check-cves", post(routes::check_cve))
-        
         .route_layer(auth_layer);
 
     // Build the main app router

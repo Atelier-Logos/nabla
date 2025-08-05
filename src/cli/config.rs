@@ -2,8 +2,8 @@ use anyhow::{Result, anyhow};
 use clap::Subcommand;
 use home;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct LLMProvider {
@@ -116,7 +116,7 @@ impl LLMProvidersConfig {
                 existing_provider.default = false;
             }
         }
-        
+
         self.providers.insert(provider.name.clone(), provider);
         self.save()
     }
@@ -145,7 +145,7 @@ impl LLMProvidersConfig {
         for (_, provider) in self.providers.iter_mut() {
             provider.default = false;
         }
-        
+
         // Set the new default
         if let Some(provider) = self.providers.get_mut(name) {
             provider.default = true;
@@ -172,11 +172,18 @@ impl LLMProvidersConfig {
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
-    Get { key: String },
-    Set { key: String, value: String },
-    SetBaseUrl { url: String },
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: String,
+    },
+    SetBaseUrl {
+        url: String,
+    },
     List,
-    
+
     // LLM Provider management
     AddProvider {
         name: String,

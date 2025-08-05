@@ -2,7 +2,7 @@
 // This tests the actual analyze_binary function with real Motorola S-record firmware data
 
 use nabla_cli::binary::analyze_binary;
-use std::fs;
+
 use tokio;
 
 /// Create a minimal Motorola S-record file for testing
@@ -15,7 +15,7 @@ S11F0054A000007C3F004C38E10008763F004C38E100089421FFF07C6C1B7876
 S10F00707C8C23784E800020E80100142E
 S5030001FB
 S9030000FC"#;
-    
+
     srec_content.as_bytes().to_vec()
 }
 
@@ -50,69 +50,82 @@ S11301D0426F6F746C6F61646572204D6F646506
 S11301E053656375726520426F6F740000000006
 S5030019E3
 S9030000FC"#;
-    
+
     srec_content.as_bytes().to_vec()
 }
 
 #[tokio::test]
 async fn test_enhanced_motorola_srec_parsing() {
     let srec_data = create_test_motorola_srec();
-    
+
     // This is the real test - calling our actual analyze_binary function
     let result = analyze_binary("firmware.s19", &srec_data).await;
-    
+
     assert!(result.is_ok(), "Motorola S-record analysis should succeed");
-    
+
     let analysis = result.unwrap();
-    
+
     // Verify basic detection
     assert_eq!(analysis.format, "motorola-srec");
     assert_eq!(analysis.file_name, "firmware.s19");
     assert!(analysis.size_bytes > 0);
-    
+
     // Test Motorola S-record specific detection
     println!("Detected architecture: {}", analysis.architecture);
     println!("Format: {}", analysis.format);
-    
+
     // Check if Motorola S-record-specific metadata was added
-    println!("Metadata: {}", serde_json::to_string_pretty(&analysis.metadata).unwrap());
+    println!(
+        "Metadata: {}",
+        serde_json::to_string_pretty(&analysis.metadata).unwrap()
+    );
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_complex_motorola_srec_parsing() {
     let srec_data = create_complex_motorola_srec();
-    
+
     let analysis = analyze_binary("complex_firmware.s28", &srec_data)
         .await
         .expect("Analysis should succeed");
-    
+
     // The key test: we should get proper Motorola S-record detection
     println!("Architecture detected: '{}'", analysis.architecture);
     println!("Format: {}", analysis.format);
     println!("Embedded strings: {:?}", analysis.embedded_strings);
-    
-    // Success criteria 
+
+    // Success criteria
     let success_checks = vec![
-        ("Motorola S-record format detected", analysis.format == "motorola-srec"),
-        ("Found embedded strings", !analysis.embedded_strings.is_empty()),
+        (
+            "Motorola S-record format detected",
+            analysis.format == "motorola-srec",
+        ),
+        (
+            "Found embedded strings",
+            !analysis.embedded_strings.is_empty(),
+        ),
         ("File analyzed", analysis.size_bytes > 0),
     ];
-    
+
     for (check_name, passed) in success_checks {
-        println!("{}: {}", check_name, if passed { "✅ PASS" } else { "❌ FAIL" });
+        println!(
+            "{}: {}",
+            check_name,
+            if passed { "✅ PASS" } else { "❌ FAIL" }
+        );
     }
-    
+
     // Look for Motorola 68000 or firmware-specific strings
     let embedded_string_combined = analysis.embedded_strings.join(" ");
-    let has_motorola_strings = embedded_string_combined.contains("Motorola") ||
-                              embedded_string_combined.contains("68000") ||
-                              embedded_string_combined.contains("Flash") ||
-                              embedded_string_combined.contains("Power");
-    
+    let has_motorola_strings = embedded_string_combined.contains("Motorola")
+        || embedded_string_combined.contains("68000")
+        || embedded_string_combined.contains("Flash")
+        || embedded_string_combined.contains("Power");
+
     if has_motorola_strings {
         println!("✅ Found Motorola/firmware specific strings");
     }
-    
+
     // At minimum, we should detect it's a Motorola S-record file
     assert_eq!(analysis.format, "motorola-srec");
 }
@@ -120,32 +133,37 @@ async fn test_complex_motorola_srec_parsing() {
 #[tokio::test]
 async fn test_motorola_srec_metadata_extraction() {
     let srec_data = create_complex_motorola_srec();
-    
+
     let analysis = analyze_binary("metadata_test.s37", &srec_data)
         .await
         .expect("Analysis should succeed");
-    
+
     // Look for Motorola S-record-specific analysis in metadata
     if let Some(srec_analysis) = analysis.metadata.get("motorola_srec_analysis") {
-        println!("✅ Found Motorola S-record-specific analysis: {}", srec_analysis);
+        println!(
+            "✅ Found Motorola S-record-specific analysis: {}",
+            srec_analysis
+        );
     } else if let Some(firmware_analysis) = analysis.metadata.get("firmware_analysis") {
         println!("✅ Found firmware-specific analysis: {}", firmware_analysis);
     } else {
         println!("⚠️ No Motorola S-record-specific analysis found, but basic parsing worked");
     }
-    
+
     // Verify firmware features were detected
     println!("Languages: {:?}", analysis.languages);
     println!("Detected symbols: {:?}", analysis.detected_symbols);
-    
+
     // Check for firmware-related symbols/functions
-    let has_firmware_symbols = analysis.detected_symbols.iter()
+    let has_firmware_symbols = analysis
+        .detected_symbols
+        .iter()
         .any(|s| s.contains("Flash") || s.contains("Initialize") || s.contains("Boot"));
-    
+
     if has_firmware_symbols {
         println!("✅ Found firmware-related symbols");
     }
-    
+
     // Basic validation that we got a valid Motorola S-record analysis
     assert_eq!(analysis.format, "motorola-srec");
     assert!(analysis.size_bytes > 0);
@@ -158,19 +176,19 @@ async fn test_motorola_srec_vs_regular_text() {
     let srec_analysis = analyze_binary("real.s19", &srec_data)
         .await
         .expect("Motorola S-record analysis should succeed");
-    
+
     // Test with regular text that looks similar
     let fake_srec = b"S0this is not real motorola s-record format data\nS1but it starts with S\n";
     let text_analysis = analyze_binary("fake.s19", fake_srec)
         .await
         .expect("Text analysis should succeed");
-    
+
     // Real Motorola S-record should be detected correctly
     assert_eq!(srec_analysis.format, "motorola-srec");
-    
+
     // Fake S-record should not be detected as Motorola S-record
     assert_ne!(text_analysis.format, "motorola-srec");
-    
+
     println!("Real Motorola S-record format: {}", srec_analysis.format);
     println!("Fake S-record format: {}", text_analysis.format);
 }
@@ -178,35 +196,35 @@ async fn test_motorola_srec_vs_regular_text() {
 #[tokio::test]
 async fn test_motorola_srec_crypto_detection() {
     let srec_data = create_complex_motorola_srec();
-    
+
     let analysis = analyze_binary("crypto_firmware.s28", &srec_data)
         .await
         .expect("Analysis should succeed");
-    
+
     // Look for cryptographic functionality in the firmware
     let embedded_string_combined = analysis.embedded_strings.join(" ");
-    let has_crypto_strings = embedded_string_combined.contains("RSA") ||
-                            embedded_string_combined.contains("AES") ||
-                            embedded_string_combined.contains("DES") ||
-                            embedded_string_combined.contains("Encrypt") ||
-                            embedded_string_combined.contains("Decrypt");
-    
+    let has_crypto_strings = embedded_string_combined.contains("RSA")
+        || embedded_string_combined.contains("AES")
+        || embedded_string_combined.contains("DES")
+        || embedded_string_combined.contains("Encrypt")
+        || embedded_string_combined.contains("Decrypt");
+
     if has_crypto_strings {
         println!("✅ Found cryptographic functionality indicators");
-        
+
         // Check if this was flagged in metadata
         if let Some(crypto_analysis) = analysis.metadata.get("crypto_analysis") {
             println!("Crypto analysis: {}", crypto_analysis);
         }
     }
-    
+
     // Look for secure boot functionality
-    let has_secure_boot = embedded_string_combined.contains("Secure Boot") ||
-                         embedded_string_combined.contains("Code Signing");
-    
+    let has_secure_boot = embedded_string_combined.contains("Secure Boot")
+        || embedded_string_combined.contains("Code Signing");
+
     if has_secure_boot {
         println!("✅ Found secure boot functionality");
     }
-    
+
     assert_eq!(analysis.format, "motorola-srec");
 }

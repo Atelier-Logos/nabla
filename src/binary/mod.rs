@@ -1,13 +1,13 @@
 // src/binary/mod.rs
 pub mod binary_analysis;
-pub mod check_vulnerabilities;
 pub mod metadata_extractor;
+pub mod scanner;
 
 pub use self::binary_analysis::analyze_binary;
-pub use self::check_vulnerabilities::{VulnerabilityMatch, scan_binary_vulnerabilities, enterprise_scan_binary_vulnerabilities};
 pub use self::metadata_extractor::{
     LicenseInfo, VersionInfo, extract_license_info, extract_version_info,
 };
+pub use self::scanner::{ScanResult, enterprise_scan_binary, scan_binary};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -25,10 +25,10 @@ pub struct CodeSection {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum CodeSectionType {
-    Text,      // Executable code
-    Data,      // Initialized data
-    Bss,       // Uninitialized data
-    Rodata,    // Read-only data
+    Text,   // Executable code
+    Data,   // Initialized data
+    Bss,    // Uninitialized data
+    Rodata, // Read-only data
     Other(String),
 }
 

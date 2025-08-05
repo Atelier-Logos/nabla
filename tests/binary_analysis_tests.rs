@@ -62,7 +62,7 @@ async fn test_analyze_binary_unicode_filename() {
 async fn test_analyze_binary_very_long_filename() {
     let data = b"test data";
     let long_name = "a".repeat(255); // Very long filename
-    let analysis = analyze_binary(&long_name, data,)
+    let analysis = analyze_binary(&long_name, data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, long_name);
@@ -106,7 +106,7 @@ async fn test_binary_analysis_struct() {
         created_at: chrono::Utc::now(),
         sbom: None,
         binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
-        entry_point: Some(0x1000),
+        entry_point: Some("0x1000".to_string()),
         code_sections: vec![],
     };
 
@@ -150,7 +150,7 @@ fn test_binary_analysis_serialization() {
         created_at: chrono::Utc::now(),
         sbom: None,
         binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
-        entry_point: Some(0x1000),
+        entry_point: Some("0x1000".to_string()),
         code_sections: vec![],
     };
 
@@ -194,7 +194,7 @@ fn test_binary_analysis_debug() {
         created_at: chrono::Utc::now(),
         sbom: None,
         binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
-        entry_point: Some(0x1000),
+        entry_point: Some("0x1000".to_string()),
         code_sections: vec![],
     };
 
@@ -228,7 +228,7 @@ fn test_binary_analysis_clone() {
         created_at: chrono::Utc::now(),
         sbom: None,
         binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
-        entry_point: Some(0x1000),
+        entry_point: Some("0x1000".to_string()),
         code_sections: vec![],
     };
 

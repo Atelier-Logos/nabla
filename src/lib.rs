@@ -65,7 +65,6 @@ pub mod server {
             .redirect(reqwest::redirect::Policy::none()) // disable redirects for SSRF protection
             .build()?;
 
-
         let state = crate::AppState {
             config: config.clone(),
             client,

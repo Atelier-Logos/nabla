@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let current_config = Config::from_env().unwrap_or_default();
     println!("✅ Current Config:");
     println!("   Deployment: {:?}", current_config.deployment_type);
-    
+
     println!("   Port: {}", current_config.port);
     println!("   Base URL: {}", current_config.base_url);
 

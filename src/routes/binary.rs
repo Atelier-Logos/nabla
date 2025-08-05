@@ -9,13 +9,11 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-
-
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
 use crate::{
     AppState,
-    binary::{BinaryAnalysis, VulnerabilityMatch, analyze_binary, scan_binary_vulnerabilities},
+    binary::{BinaryAnalysis, ScanResult, analyze_binary, scan_binary},
 };
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
@@ -134,10 +132,8 @@ pub struct ErrorResponse {
 
 #[derive(Debug, Serialize)]
 pub struct CveScanResponse {
-    pub matches: Vec<VulnerabilityMatch>,
+    pub scan_result: ScanResult,
 }
-
-
 
 pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({
@@ -236,18 +232,16 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
 
     // Analyze the binary
-    let analysis = analyze_binary(&file_name, &contents)
-        .await
-        .map_err(|e| {
-            tracing::error!("Binary analysis failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
+    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
+            }),
+        )
+    })?;
 
     tracing::info!(
         "Analysis completed for {}: format={}, arch={}, {} strings",
@@ -264,7 +258,7 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
-use crate::binary::enterprise_scan_binary_vulnerabilities;
+use crate::binary::enterprise_scan_binary;
 
 pub async fn check_cve(
     State(state): State<AppState>,
@@ -319,32 +313,35 @@ pub async fn check_cve(
         ));
     }
 
-    let analysis = analyze_binary(&file_name, &contents)
-        .await
-        .map_err(|e| {
-            tracing::error!("Binary analysis failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
+    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
+            }),
+        )
+    })?;
 
     tracing::info!("Binary analysis complete: {:?}", analysis);
 
     let response_json = if state.config.enterprise_features {
-        let matches = enterprise_scan_binary_vulnerabilities(&analysis);
+        let scan_result = enterprise_scan_binary(&analysis);
         tracing::info!(
-            "Enterprise vuln scan complete. {} match(es)",
-            matches.len()
+            "Enterprise vuln scan complete. {} vulnerability findings, {} security findings",
+            scan_result.vulnerability_findings.len(),
+            scan_result.security_findings.len()
         );
-        serde_json::to_value(matches).unwrap_or_default()
+        serde_json::to_value(scan_result).unwrap_or_default()
     } else {
-        let matches = scan_binary_vulnerabilities(&analysis);
-        tracing::info!("OSS vuln scan complete. {} match(es)", matches.len());
-        serde_json::to_value(matches).unwrap_or_default()
+        let scan_result = scan_binary(&analysis);
+        tracing::info!(
+            "OSS vuln scan complete. {} vulnerability findings, {} security findings",
+            scan_result.vulnerability_findings.len(),
+            scan_result.security_findings.len()
+        );
+        serde_json::to_value(scan_result).unwrap_or_default()
     };
 
     Ok(Json(response_json))

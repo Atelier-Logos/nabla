@@ -1,20 +1,19 @@
 // tests/enterprise_license_gating_tests.rs
 
 use axum::{
-    Router,
+    Json, Router,
     body::Body,
+    extract::State,
     http::{Request, StatusCode, header},
     routing::post,
-    extract::State,
-    Json
 };
+use chrono::Utc;
+use jsonwebtoken::{EncodingKey, Header, encode};
+use nabla_cli::middleware::{Claims, PlanFeatures};
 use nabla_cli::{AppState, Config, config::DeploymentType, middleware::validate_license_jwt};
-use nabla_cli::middleware::{PlanFeatures, Claims};
+use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt;
-use jsonwebtoken::{encode, Header, EncodingKey};
-use chrono::Utc;
-use serde_json::Value;
 
 // Mock protected route that checks for exploitability analysis
 async fn mock_cve_check_route(
@@ -85,7 +84,7 @@ async fn test_oss_deployment_defaults_no_exploitability() {
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["type"], "oss");
     assert_eq!(json["exploitability_analysis"], false);
 }
@@ -130,7 +129,7 @@ async fn test_private_deployment_requires_jwt() {
 #[tokio::test]
 async fn test_valid_jwt_with_exploitability_analysis() {
     let secret = Arc::new([42u8; 32]); // Use a consistent secret
-    
+
     // Create valid JWT with exploitability analysis enabled
     let claims = Claims {
         sub: "test-company".to_string(),
@@ -157,8 +156,9 @@ async fn test_valid_jwt_with_exploitability_analysis() {
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&secret[..])
-    ).unwrap();
+        &EncodingKey::from_secret(&secret[..]),
+    )
+    .unwrap();
 
     // Create app state for NablaSecure deployment
     let config = Config {
@@ -199,7 +199,7 @@ async fn test_valid_jwt_with_exploitability_analysis() {
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["type"], "enterprise");
     assert_eq!(json["exploitability_analysis"], true);
 }
@@ -207,7 +207,7 @@ async fn test_valid_jwt_with_exploitability_analysis() {
 #[tokio::test]
 async fn test_valid_jwt_without_exploitability_analysis() {
     let secret = Arc::new([42u8; 32]); // Use a consistent secret
-    
+
     // Create valid JWT with exploitability analysis disabled
     let claims = Claims {
         sub: "test-company".to_string(),
@@ -234,8 +234,9 @@ async fn test_valid_jwt_without_exploitability_analysis() {
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&secret[..])
-    ).unwrap();
+        &EncodingKey::from_secret(&secret[..]),
+    )
+    .unwrap();
 
     // Create app state for NablaSecure deployment - simplified logic just checks config.enterprise_features
     let config = Config {
@@ -277,7 +278,7 @@ async fn test_valid_jwt_without_exploitability_analysis() {
         .await
         .unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    
+
     // With simplified logic, NablaSecure deployment + enterprise_features=true always returns "enterprise"
     assert_eq!(json["type"], "enterprise");
     assert_eq!(json["exploitability_analysis"], true);
@@ -286,7 +287,7 @@ async fn test_valid_jwt_without_exploitability_analysis() {
 #[tokio::test]
 async fn test_expired_jwt() {
     let secret = Arc::new([42u8; 32]);
-    
+
     // Create expired JWT
     let claims = Claims {
         sub: "test-company".to_string(),
@@ -313,8 +314,9 @@ async fn test_expired_jwt() {
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&secret[..])
-    ).unwrap();
+        &EncodingKey::from_secret(&secret[..]),
+    )
+    .unwrap();
 
     // Create app state for NablaSecure deployment
     let config = Config {
@@ -355,7 +357,7 @@ async fn test_expired_jwt() {
 #[test]
 fn test_plan_features_default_oss() {
     let features = PlanFeatures::default_oss();
-    
+
     // OSS should not have exploitability analysis
     assert!(!features.exploitability_analysis);
     assert!(features.vulnerability_scanning); // But should have basic vulnerability scanning

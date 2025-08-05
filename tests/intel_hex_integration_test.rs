@@ -25,7 +25,7 @@ fn create_test_intel_hex() -> Vec<u8> {
 :1000E00000F05EF800F062F800F066F800F06AF868
 :1000F00000F06EF800F072F800F076F800F07AF834
 :00000001FF"#;
-    
+
     hex_content.as_bytes().to_vec()
 }
 
@@ -36,64 +36,74 @@ fn create_arm_cortex_hex() -> Vec<u8> {
 :10000000000420008D030008910300089503000044
 :10001000990300089D030008A1030008A503000028
 :00000001FF"#;
-    
+
     hex_content.as_bytes().to_vec()
 }
 
 #[tokio::test]
 async fn test_enhanced_intel_hex_parsing() {
     let hex_data = create_test_intel_hex();
-    
+
     // This is the real test - calling our actual analyze_binary function
     let result = analyze_binary("firmware.hex", &hex_data).await;
-    
+
     assert!(result.is_ok(), "Intel HEX analysis should succeed");
-    
+
     let analysis = result.unwrap();
-    
+
     // Verify basic detection - should now work with manual parsing
     println!("Detected format: {}", analysis.format);
     assert_eq!(analysis.format, "intel-hex");
     assert_eq!(analysis.file_name, "firmware.hex");
     assert!(analysis.size_bytes > 0);
-    
+
     // Test Intel HEX specific detection
     println!("Detected architecture: {}", analysis.architecture);
     println!("Format: {}", analysis.format);
-    
+
     // Should detect embedded architecture
     assert_eq!(analysis.architecture, "embedded");
-    
+
     // Verify we have firmware language detected
     assert!(analysis.languages.contains(&"Firmware".to_string()));
-    
+
     // Check if Intel HEX-specific metadata was added
-    println!("Metadata: {}", serde_json::to_string_pretty(&analysis.metadata).unwrap());
+    println!(
+        "Metadata: {}",
+        serde_json::to_string_pretty(&analysis.metadata).unwrap()
+    );
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_arm_cortex_hex_parsing() {
     let hex_data = create_arm_cortex_hex();
-    
+
     let analysis = analyze_binary("cortex_firmware.hex", &hex_data)
         .await
         .expect("Analysis should succeed");
-    
+
     // The key test: we should get proper Intel HEX detection
     println!("Architecture detected: '{}'", analysis.architecture);
     println!("Format: {}", analysis.format);
-    
-    // Success criteria 
+
+    // Success criteria
     let success_checks = vec![
         ("Intel HEX format detected", analysis.format == "intel-hex"),
-        ("Embedded architecture detected", analysis.architecture == "embedded"),
+        (
+            "Embedded architecture detected",
+            analysis.architecture == "embedded",
+        ),
         ("File analyzed", analysis.size_bytes > 0),
     ];
-    
+
     for (check_name, passed) in success_checks {
-        println!("{}: {}", check_name, if passed { "✅ PASS" } else { "❌ FAIL" });
+        println!(
+            "{}: {}",
+            check_name,
+            if passed { "✅ PASS" } else { "❌ FAIL" }
+        );
     }
-    
+
     // At minimum, we should detect it's an Intel HEX file
     assert_eq!(analysis.format, "intel-hex");
     assert_eq!(analysis.architecture, "embedded");
@@ -102,11 +112,11 @@ async fn test_arm_cortex_hex_parsing() {
 #[tokio::test]
 async fn test_intel_hex_metadata_extraction() {
     let hex_data = create_test_intel_hex();
-    
+
     let analysis = analyze_binary("metadata_test.hex", &hex_data)
         .await
         .expect("Analysis should succeed");
-    
+
     // Look for Intel HEX-specific analysis in metadata
     if let Some(hex_analysis) = analysis.metadata.get("intel_hex_analysis") {
         println!("✅ Found Intel HEX-specific analysis: {}", hex_analysis);
@@ -115,11 +125,11 @@ async fn test_intel_hex_metadata_extraction() {
     } else {
         println!("⚠️ No Intel HEX-specific analysis found, but basic parsing worked");
     }
-    
+
     // Verify firmware features were detected
     println!("Languages: {:?}", analysis.languages);
     println!("Detected symbols: {:?}", analysis.detected_symbols);
-    
+
     // Basic validation that we got a valid Intel HEX analysis
     assert_eq!(analysis.format, "intel-hex");
     assert!(analysis.size_bytes > 0);
@@ -133,19 +143,19 @@ async fn test_intel_hex_vs_regular_text() {
     let hex_analysis = analyze_binary("real.hex", &hex_data)
         .await
         .expect("Intel HEX analysis should succeed");
-    
+
     // Test with regular text that looks similar but has invalid format
     let fake_hex = b"This is not a real Intel HEX file\nIt just contains some text\nNo colons here";
     let text_analysis = analyze_binary("fake.hex", fake_hex)
         .await
         .expect("Text analysis should succeed");
-    
+
     // Real Intel HEX should be detected correctly
     assert_eq!(hex_analysis.format, "intel-hex");
-    
+
     // Fake hex should not be detected as Intel HEX
     assert_ne!(text_analysis.format, "intel-hex");
-    
+
     println!("Real Intel HEX format: {}", hex_analysis.format);
     println!("Fake hex format: {}", text_analysis.format);
 }

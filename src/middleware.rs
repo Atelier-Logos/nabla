@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::DeploymentType, AppState};
+use crate::{AppState, config::DeploymentType};
 use once_cell::sync::Lazy;
 use serde_json::json;
 

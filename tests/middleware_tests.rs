@@ -17,7 +17,7 @@ async fn test_protected_route() -> &'static str {
 
 #[tokio::test]
 async fn test_middleware_fips_mode_enabled() {
-    // Create app state for NablaSecure deployment 
+    // Create app state for NablaSecure deployment
     let config = Config {
         deployment_type: DeploymentType::NablaSecure,
         enterprise_features: true,
