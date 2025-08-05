@@ -151,7 +151,7 @@ impl ControlFlowGraph {
     }
 
     /// Build CFG from binary analysis with Capstone disassembly
-    pub fn build_from_analysis(analysis: &BinaryAnalysis) -> Result<Self, String> {
+    pub fn build_cfg(analysis: &BinaryAnalysis) -> Result<Self, String> {
         let mut cfg = Self::new();
 
         // Initialize Capstone based on architecture
@@ -174,7 +174,7 @@ impl ControlFlowGraph {
         Ok(cfg)
     }
 
-    fn init_capstone(&self, architecture: &str) -> Result<Capstone, String> {
+    pub fn init_capstone(&self, architecture: &str) -> Result<Capstone, String> {
         match architecture.to_lowercase().as_str() {
             "x86_64" | "amd64" => Capstone::new()
                 .x86()
@@ -212,7 +212,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn build_basic_blocks_from_symbols(
+    pub fn build_basic_blocks_from_symbols(
         &mut self,
         analysis: &BinaryAnalysis,
         _cs: &Capstone,
@@ -306,7 +306,7 @@ impl ControlFlowGraph {
         Ok(())
     }
 
-    fn build_basic_blocks_from_binary(
+   pub fn build_basic_blocks_from_binary(
         &mut self,
         analysis: &BinaryAnalysis,
         cs: &Capstone,
@@ -367,7 +367,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn extract_code_sections_by_format(
+    pub fn extract_code_sections_by_format(
         &self,
         analysis: &BinaryAnalysis,
         binary_data: &[u8],
@@ -400,7 +400,7 @@ impl ControlFlowGraph {
     }
 
     // ELF Entry Point and Code Section Extraction
-    fn extract_elf_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
+   pub fn extract_elf_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
         if binary_data.len() < 64 {
             return Ok(0x1000);
         }
@@ -425,7 +425,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn extract_elf_code_sections(&self, binary_data: &[u8]) -> Result<Vec<CodeSection>, String> {
+    pub fn extract_elf_code_sections(&self, binary_data: &[u8]) -> Result<Vec<CodeSection>, String> {
         if binary_data.len() < 64 || &binary_data[0..4] != b"\x7fELF" {
             let entry_point = self.extract_elf_entry_point(binary_data)?;
             return Ok(vec![CodeSection {
@@ -636,7 +636,7 @@ impl ControlFlowGraph {
         }])
     }
 
-    fn get_elf_string_table(
+    pub fn get_elf_string_table(
         &self,
         binary_data: &[u8],
         shoff: u64,
@@ -692,7 +692,7 @@ impl ControlFlowGraph {
         Some(binary_data[sh_offset as usize..(sh_offset + sh_size) as usize].to_vec())
     }
 
-    fn get_string_from_table(&self, string_table: &[u8], offset: usize) -> Option<String> {
+    pub fn get_string_from_table(&self, string_table: &[u8], offset: usize) -> Option<String> {
         if offset >= string_table.len() {
             return None;
         }
@@ -706,7 +706,7 @@ impl ControlFlowGraph {
     }
 
     // PE Entry Point and Code Section Extraction
-    fn extract_pe_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
+    pub fn extract_pe_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
         if binary_data.len() < 64 || &binary_data[0..2] != b"MZ" {
             return Ok(0x401000); // Default PE image base
         }
@@ -732,7 +732,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn extract_pe_code_sections(&self, binary_data: &[u8]) -> Result<Vec<CodeSection>, String> {
+    pub fn extract_pe_code_sections(&self, binary_data: &[u8]) -> Result<Vec<CodeSection>, String> {
         let entry_point = self.extract_pe_entry_point(binary_data)?;
         Ok(vec![CodeSection {
             name: ".text".to_string(),
@@ -745,7 +745,7 @@ impl ControlFlowGraph {
     }
 
     // Intel HEX Entry Point and Code Section Extraction
-    fn extract_intel_hex_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
+    pub fn extract_intel_hex_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
         let hex_content = String::from_utf8_lossy(binary_data);
         let mut lowest_address = u64::MAX;
         let mut entry_point_found = None;
@@ -796,7 +796,7 @@ impl ControlFlowGraph {
         }))
     }
 
-    fn extract_intel_hex_code_sections(
+    pub fn extract_intel_hex_code_sections(
         &self,
         binary_data: &[u8],
         entry_point: u64,
@@ -857,7 +857,7 @@ impl ControlFlowGraph {
     }
 
     // Motorola S-Record Entry Point and Code Section Extraction
-    fn extract_srec_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
+    pub fn extract_srec_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
         let srec_content = String::from_utf8_lossy(binary_data);
         let mut entry_point = None;
         let mut lowest_address = u64::MAX;
@@ -914,7 +914,7 @@ impl ControlFlowGraph {
         }))
     }
 
-    fn extract_srec_code_sections(
+    pub fn extract_srec_code_sections(
         &self,
         binary_data: &[u8],
         entry_point: u64,
@@ -972,7 +972,7 @@ impl ControlFlowGraph {
     }
 
     // ARM Cortex-M Entry Point and Code Section Extraction
-    fn extract_arm_cortex_m_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
+    pub fn extract_arm_cortex_m_entry_point(&self, binary_data: &[u8]) -> Result<u64, String> {
         if binary_data.len() < 8 {
             return Ok(0x00000000);
         }
@@ -1006,7 +1006,7 @@ impl ControlFlowGraph {
     }
 
     // Raw Firmware Entry Point and Code Section Extraction
-    fn extract_raw_firmware_entry_point(
+    pub fn extract_raw_firmware_entry_point(
         &self,
         analysis: &BinaryAnalysis,
         _binary_data: &[u8],
@@ -1031,7 +1031,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn extract_raw_firmware_code_sections(
+    pub fn extract_raw_firmware_code_sections(
         &self,
         binary_data: &[u8],
         entry_point: u64,
@@ -1046,7 +1046,7 @@ impl ControlFlowGraph {
         }])
     }
 
-    fn disassemble_code_section(
+    pub fn disassemble_code_section(
         &mut self,
         cs: &Capstone,
         binary_data: &[u8],
@@ -1082,7 +1082,7 @@ impl ControlFlowGraph {
         Ok(())
     }
 
-    fn build_basic_blocks_from_instructions(
+    pub fn build_basic_blocks_from_instructions(
         &mut self,
         instructions: &capstone::Instructions,
         entry_point: u64,
@@ -1208,7 +1208,7 @@ impl ControlFlowGraph {
         Ok(())
     }
 
-    fn get_block_end_address(&self, block: &BasicBlock) -> u64 {
+    pub fn get_block_end_address(&self, block: &BasicBlock) -> u64 {
         if let Some(last_insn) = block.instructions.last() {
             last_insn.address + last_insn.size as u64
         } else {
@@ -1224,7 +1224,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn build_control_flow_edges(&mut self) -> Result<(), String> {
+    pub fn build_control_flow_edges(&mut self) -> Result<(), String> {
         let nodes: Vec<_> = self.graph.node_indices().collect();
 
         for node_idx in nodes {
@@ -1263,12 +1263,12 @@ impl ControlFlowGraph {
         Ok(())
     }
 
-    fn find_block_at_address(&self, address: u64) -> Option<NodeIndex> {
+    pub fn find_block_at_address(&self, address: u64) -> Option<NodeIndex> {
         self.address_to_node.get(&address).copied()
     }
 
     // Helper methods for instruction analysis
-    fn is_function_entry_heuristic(&self, addr: u64, instructions: &[Instruction]) -> bool {
+    pub fn is_function_entry_heuristic(&self, addr: u64, instructions: &[Instruction]) -> bool {
         if instructions.is_empty() {
             return false;
         }
@@ -1304,7 +1304,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn is_block_boundary_instruction(&self, insn: &capstone::Insn) -> bool {
+    pub fn is_block_boundary_instruction(&self, insn: &capstone::Insn) -> bool {
         if let Some(mnemonic) = insn.mnemonic() {
             matches!(
                 mnemonic,
@@ -1333,7 +1333,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn is_branch_instruction(&self, insn: &capstone::Insn) -> bool {
+    pub fn is_branch_instruction(&self, insn: &capstone::Insn) -> bool {
         if let Some(mnemonic) = insn.mnemonic() {
             matches!(
                 mnemonic,
@@ -1387,7 +1387,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn is_call_instruction(&self, insn: &capstone::Insn) -> bool {
+    pub fn is_call_instruction(&self, insn: &capstone::Insn) -> bool {
         if let Some(mnemonic) = insn.mnemonic() {
             matches!(mnemonic, "call" | "callq" | "bl" | "blx" | "jal" | "jalr")
         } else {
@@ -1395,7 +1395,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn is_return_instruction(&self, insn: &capstone::Insn) -> bool {
+    pub fn is_return_instruction(&self, insn: &capstone::Insn) -> bool {
         if let Some(mnemonic) = insn.mnemonic() {
             matches!(mnemonic, "ret" | "retq" | "retn" | "bx" | "jr")
         } else {
@@ -1403,7 +1403,7 @@ impl ControlFlowGraph {
         }
     }
 
-    fn get_branch_target(&self, insn: &capstone::Insn) -> Option<u64> {
+    pub fn get_branch_target(&self, insn: &capstone::Insn) -> Option<u64> {
         if let Some(op_str) = insn.op_str() {
             // Try to parse hex addresses (e.g., "0x401000")
             if op_str.starts_with("0x") {
@@ -1419,7 +1419,7 @@ impl ControlFlowGraph {
         None
     }
 
-    fn is_conditional_block(&self, instructions: &[Instruction]) -> bool {
+    pub fn is_conditional_block(&self, instructions: &[Instruction]) -> bool {
         instructions.iter().any(|insn| {
             matches!(
                 insn.mnemonic.as_str(),
@@ -1441,7 +1441,7 @@ impl ControlFlowGraph {
         })
     }
 
-    fn is_call_block(&self, instructions: &[Instruction]) -> bool {
+   pub fn is_call_block(&self, instructions: &[Instruction]) -> bool {
         instructions.iter().any(|insn| {
             matches!(
                 insn.mnemonic.as_str(),
@@ -1452,7 +1452,7 @@ impl ControlFlowGraph {
         })
     }
 
-    fn extract_condition(&self, instructions: &[Instruction]) -> String {
+    pub fn extract_condition(&self, instructions: &[Instruction]) -> String {
         for insn in instructions {
             if matches!(
                 insn.mnemonic.as_str(),
@@ -1496,7 +1496,7 @@ impl ControlFlowGraph {
         "unknown".to_string()
     }
 
-    fn extract_call_target(&self, instructions: &[Instruction]) -> String {
+    pub fn extract_call_target(&self, instructions: &[Instruction]) -> String {
         for insn in instructions {
             if matches!(
                 insn.mnemonic.as_str(),
@@ -1508,7 +1508,7 @@ impl ControlFlowGraph {
         "unknown".to_string()
     }
 
-    fn create_placeholder_instructions(
+    pub fn create_placeholder_instructions(
         &self,
         start_addr: u64,
         function_name: &str,
@@ -1602,7 +1602,7 @@ impl ControlFlowGraph {
         instructions
     }
 
-    fn detect_loops(&mut self) {
+    pub fn detect_loops(&mut self) {
         // Implement natural loop detection using dominator analysis
         // This is a simplified version - would need proper back-edge detection
 
@@ -1635,13 +1635,13 @@ impl ControlFlowGraph {
         }
     }
 
-    fn build_dominators(&mut self) {
+    pub fn build_dominators(&mut self) {
         if let Some(entry_node) = self.graph.node_indices().next() {
             self.dominators = Some(dominators::simple_fast(&self.graph, entry_node));
         }
     }
 
-    fn get_block_address(&self, block: &BasicBlock) -> Option<u64> {
+    pub fn get_block_address(&self, block: &BasicBlock) -> Option<u64> {
         match &block.block_type {
             BasicBlockType::FunctionEntry { address, .. } => Some(*address),
             BasicBlockType::Sequential { start_address, .. } => Some(*start_address),
@@ -1653,14 +1653,14 @@ impl ControlFlowGraph {
         }
     }
 
-    fn get_block_address_by_node(&self, node_idx: NodeIndex) -> Option<u64> {
+   pub fn get_block_address_by_node(&self, node_idx: NodeIndex) -> Option<u64> {
         self.graph
             .node_weight(node_idx)
             .and_then(|block| self.get_block_address(block))
     }
 
     /// Analyze call graph relationships
-    pub fn analyze_call_graph(&self, analysis: &BinaryAnalysis) -> CallGraphAnalysis {
+   pub pub fn analyze_call_graph(&self, analysis: &BinaryAnalysis) -> CallGraphAnalysis {
         let mut call_sites = Vec::new();
         let mut function_summaries = HashMap::new();
         let mut recursive_functions = Vec::new();
