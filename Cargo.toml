@@ -1,9 +1,9 @@
 [package]
 name = "nabla-cli"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
-description = "An OSS SAST/SCA API for calculating your SSCS gradients"
-keywords = ["security", "binary-analysis", "cli", "sbom", "vulnerability"]
+description = "An OSS tool for reverse engineering and binary composition analysis"
+keywords = ["security", "binary-analysis", "cli", "reverse-engineering", "vulnerability"]
 categories = ["command-line-utilities", "development-tools"]
 license = "MIT" # or your preferred license
 repository = "https://github.com/Atelier-Logos/nabla"
@@ -40,7 +40,6 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "multipart", "blocking"] }
 ureq = { version = "2.9", features = ["json"] }
 
-# FIPS-compliant TLS support
 rustls = "0.21"
 rustls-pemfile = "1.0"
 webpki-roots = "0.25"
@@ -75,11 +74,9 @@ base64 = "0.21"    # or latest
 hex = "0.4"
 hmac = "0.12"
 
-# FIPS 140-3 key derivation
 pbkdf2 = { version = "0.12", features = ["simple"] }
 hkdf = "0.12"
 
-# OpenSSL for FIPS compliance
 openssl = "0.10"
 
 # Binary analysis
@@ -88,6 +85,13 @@ object = "0.34"
 wasmparser = "0.121"
 infer = "0.16"
 pelite = "0.10"
+yara-x = "1.4.0"
+dicom = "0.8.2"
+ihex = "3.0.0"
+srec = "0.2.0"
+capstone = "0.13.0"
+petgraph = "0.8.2"
+rayon = "1.10.0"
 
 # Secret scanning
 aho-corasick = "1.1"
@@ -122,7 +126,7 @@ rand = "0.9"
 jsonwebtoken = "9"
 ed25519-dalek = "2"
 clap = { version = "4", features = ["derive"] }
-async-trait = "0.1"
+
 rpassword = "7.3"
 
 # Interactive shell dependencies (for future use)
@@ -141,9 +145,6 @@ doppler-rs = { version = "0.0.2", optional = true }
 name = "nabla"
 path = "src/bin/nabla_shell.rs"
 
-[[bin]]
-name = "test-middleware"
-path = "src/bin/test_middleware.rs"
 
 [[bin]]
 name = "test-deployment-modes"

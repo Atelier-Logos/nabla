@@ -2,8 +2,8 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use clap::Parser;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, errors::ErrorKind};
-use serde::Deserialize;
 use nabla_cli::config::Config;
+use serde::Deserialize;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -52,14 +52,12 @@ struct PlanFeatures {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let secret_base64 = args
-        .secret
-        .unwrap_or_else(|| {
-            // Use config system to get consistent key
-            Config::from_env()
-                .expect("Failed to load config")
-                .license_signing_key
-        });
+    let secret_base64 = args.secret.unwrap_or_else(|| {
+        // Use config system to get consistent key
+        Config::from_env()
+            .expect("Failed to load config")
+            .license_signing_key
+    });
 
     let decoded = URL_SAFE_NO_PAD
         .decode(&secret_base64)

@@ -208,7 +208,7 @@ Copy `.env.example` to `.env` and configure:
 
 ```bash
 PORT=8080
-FIPS_MODE=false          # Enable FIPS 140-2 compliance
+FIPS_MODE=false          # Enable FIPS 140-3 compliance
 FIPS_VALIDATION=false    # Enable FIPS validation checks
 ```
 
@@ -261,7 +261,7 @@ We also secure all of our repos with cloud-based end-to-end security using Aikid
 
 ### Environment Variables
 ```bash
-FIPS_MODE=true           # Enable FIPS 140-2 compliance
+FIPS_MODE=true           # Enable FIPS 140-3 compliance
 FIPS_VALIDATION=true     # Enable FIPS validation checks
 ```
 

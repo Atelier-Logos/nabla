@@ -58,7 +58,7 @@ impl Default for SSRFConfig {
 /// SSRF protection validator
 #[derive(Debug, Clone)]
 pub struct SSRFValidator {
-    config: SSRFConfig,
+    pub config: SSRFConfig,
 }
 
 impl SSRFValidator {

@@ -59,9 +59,9 @@ fn test_localhost_handling() {
     assert!(validator.validate_url("http://localhost:3000/test").is_ok());
 
     // Test localhost with allow_localhost = false
-    let mut config = validator.config().clone();
+    let mut config = validator.config.clone();
     config.allow_localhost = false;
-    validator.update_config(config);
+    validator.config = config;
     assert!(
         validator
             .validate_url("http://localhost:11434/completion")
@@ -98,9 +98,9 @@ fn test_private_ip_blocking() {
     );
 
     // Test private IPs with allow_private_ips = true
-    let mut config = validator.config().clone();
+    let mut config = validator.config.clone();
     config.allow_private_ips = true;
-    validator.update_config(config);
+    validator.config = config;
     assert!(
         validator
             .validate_url("http://192.168.1.1:8080/api")
@@ -151,7 +151,7 @@ fn test_custom_whitelist() {
         .whitelisted_domains
         .insert("my-service.org".to_string());
 
-    let validator = SSRFValidator::with_config(config);
+    let validator = SSRFValidator { config };
 
     // Test custom whitelisted domains
     assert!(
@@ -366,7 +366,10 @@ fn test_configuration_management() {
     let mut validator = SSRFValidator::new();
 
     // Test adding domains to whitelist
-    validator.add_whitelisted_domain("test-api.com".to_string());
+    validator
+        .config
+        .whitelisted_domains
+        .insert("test-api.com".to_string());
     assert!(
         validator
             .validate_url("https://test-api.com/v1/endpoint")
@@ -374,7 +377,7 @@ fn test_configuration_management() {
     );
 
     // Test removing domains from whitelist
-    validator.remove_whitelisted_domain("test-api.com");
+    validator.config.whitelisted_domains.remove("test-api.com");
     assert!(
         validator
             .validate_url("https://test-api.com/v1/endpoint")
@@ -382,10 +385,13 @@ fn test_configuration_management() {
     );
 
     // Test adding IP ranges
-    validator.add_whitelisted_ip("192.168.1.0/24".to_string());
-    let mut config = validator.config().clone();
+    validator
+        .config
+        .whitelisted_ips
+        .insert("192.168.1.0/24".to_string());
+    let mut config = validator.config.clone();
     config.allow_private_ips = false;
-    validator.update_config(config);
+    validator.config = config;
     assert!(
         validator
             .validate_url("http://192.168.1.100:8080/api")
@@ -393,7 +399,7 @@ fn test_configuration_management() {
     );
 
     // Test removing IP ranges
-    validator.remove_whitelisted_ip("192.168.1.0/24");
+    validator.config.whitelisted_ips.remove("192.168.1.0/24");
     assert!(
         validator
             .validate_url("http://192.168.1.100:8080/api")

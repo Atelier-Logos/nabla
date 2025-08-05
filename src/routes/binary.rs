@@ -1,29 +1,25 @@
 // src/routes/binary.rs
 use anyhow::Result;
 use axum::{
-    extract::{Multipart, Request, State},
+    extract::{Multipart, State},
     http::StatusCode,
     response::Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
-
-// Add this line to import the inference module
-use crate::enterprise::providers::{
-    GenerationOptions, GenerationResponse, HTTPProvider, InferenceProvider,
-};
 
 // Type alias for JSON responses
 // Removed custom ResponseJson type alias
 use crate::{
     AppState,
-    binary::{BinaryAnalysis, VulnerabilityMatch, analyze_binary, scan_binary_vulnerabilities},
-    middleware::PlanFeatures,
+    binary::{BinaryAnalysis, ScanResult, analyze_binary, scan_binary},
 };
 
 /// Validates and sanitizes a file path to prevent path traversal attacks
 /// Returns the canonicalized path if valid, or an error if the path is unsafe
+/// This function is kept available for potential future web endpoints that need file path validation
+#[allow(dead_code)]
 pub fn validate_file_path(
     file_path: &str,
 ) -> Result<std::path::PathBuf, (StatusCode, Json<ErrorResponse>)> {
@@ -136,71 +132,20 @@ pub struct ErrorResponse {
 
 #[derive(Debug, Serialize)]
 pub struct CveScanResponse {
-    pub matches: Vec<VulnerabilityMatch>,
+    pub scan_result: ScanResult,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ChatRequest {
-    pub file_path: String, // Path to the file instead of raw content
-    pub question: String,
-    pub model_path: Option<String>,     // For local GGUF files
-    pub hf_repo: Option<String>,        // For remote HF repos
-    pub provider: String,               // "http" for HTTP provider
-    pub inference_url: Option<String>,  // URL for the inference server
-    pub provider_token: Option<String>, // Token for third-party authentication
-    pub options: Option<GenerationOptions>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ChatResponse {
-    pub answer: String,
-    pub model_used: String,
-    pub tokens_used: usize,
-}
-
-pub async fn health_check(State(mut state): State<AppState>) -> Json<serde_json::Value> {
-    let fips_status = if state.config.fips_mode {
-        state.crypto_provider.validate_fips_compliance().is_ok()
-    } else {
-        false
-    };
-
-    let fips_details = if state.config.fips_mode {
-        json!({
-            "fips_mode": true,
-            "fips_compliant": fips_status,
-            "fips_validation": state.config.fips_validation,
-            "approved_algorithms": [
-                "SHA-256",
-                "SHA-512",
-                "HMAC-SHA256",
-                "AES-256-GCM",
-                "TLS13_AES_256_GCM_SHA384"
-            ],
-            "hash_algorithm": "SHA-512",
-            "random_generator": "FIPS-compliant OS RNG"
-        })
-    } else {
-        json!({
-            "fips_mode": false,
-            "fips_compliant": false,
-            "fips_validation": false,
-            "hash_algorithm": "Blake3",
-            "random_generator": "Standard RNG"
-        })
-    };
-
+pub async fn health_check() -> Json<serde_json::Value> {
     Json(json!({
         "status": "healthy",
         "service": "Nabla",
         "version": env!("CARGO_PKG_VERSION"),
-        "fips": fips_details
     }))
 }
 
 // POST /binary - Upload and analyze binary
 pub async fn upload_and_analyze_binary(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<BinaryUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut file_name = "unknown".to_string();
@@ -287,18 +232,16 @@ pub async fn upload_and_analyze_binary(
     tracing::info!("Analyzing file: '{}' ({} bytes)", file_name, contents.len());
 
     // Analyze the binary
-    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider)
-        .await
-        .map_err(|e| {
-            tracing::error!("Binary analysis failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
+    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
+            }),
+        )
+    })?;
 
     tracing::info!(
         "Analysis completed for {}: format={}, arch={}, {} strings",
@@ -315,10 +258,12 @@ pub async fn upload_and_analyze_binary(
     }))
 }
 
+use crate::binary::enterprise_scan_binary;
+
 pub async fn check_cve(
     State(state): State<AppState>,
     mut multipart: Multipart,
-) -> Result<Json<CveScanResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     tracing::info!("check_cve handler called");
 
     let mut contents = vec![];
@@ -368,30 +313,43 @@ pub async fn check_cve(
         ));
     }
 
-    let analysis = analyze_binary(&file_name, &contents, &state.crypto_provider)
-        .await
-        .map_err(|e| {
-            tracing::error!("Binary analysis failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
+    let analysis = analyze_binary(&file_name, &contents).await.map_err(|e| {
+        tracing::error!("Binary analysis failed: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "analysis_error".to_string(),
+                message: format!("Failed to analyze binary: {}", e),
+            }),
+        )
+    })?;
 
     tracing::info!("Binary analysis complete: {:?}", analysis);
 
-    let matches = scan_binary_vulnerabilities(&analysis);
-    tracing::info!("Vuln scan complete. {} match(es)", matches.len());
+    let response_json = if state.config.enterprise_features {
+        let scan_result = enterprise_scan_binary(&analysis);
+        tracing::info!(
+            "Enterprise vuln scan complete. {} vulnerability findings, {} security findings",
+            scan_result.vulnerability_findings.len(),
+            scan_result.security_findings.len()
+        );
+        serde_json::to_value(scan_result).unwrap_or_default()
+    } else {
+        let scan_result = scan_binary(&analysis);
+        tracing::info!(
+            "OSS vuln scan complete. {} vulnerability findings, {} security findings",
+            scan_result.vulnerability_findings.len(),
+            scan_result.security_findings.len()
+        );
+        serde_json::to_value(scan_result).unwrap_or_default()
+    };
 
-    Ok(Json(CveScanResponse { matches }))
+    Ok(Json(response_json))
 }
 
 // POST /binary/diff - compare two binaries
 pub async fn diff_binaries(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, (StatusCode, Json<ErrorResponse>)> {
     // Extract two files
@@ -436,7 +394,7 @@ pub async fn diff_binaries(
     }
 
     // Analyze each binary to get symbol information
-    let analysis1 = analyze_binary(&files[0].0, &files[0].1, &state.crypto_provider)
+    let analysis1 = analyze_binary(&files[0].0, &files[0].1)
         .await
         .map_err(|e| {
             (
@@ -448,7 +406,7 @@ pub async fn diff_binaries(
             )
         })?;
 
-    let analysis2 = analyze_binary(&files[1].0, &files[1].1, &state.crypto_provider)
+    let analysis2 = analyze_binary(&files[1].0, &files[1].1)
         .await
         .map_err(|e| {
             (
@@ -521,231 +479,4 @@ pub async fn diff_binaries(
     );
 
     Ok(Json(meta.into()))
-}
-
-#[axum::debug_handler]
-pub async fn chat_with_binary(
-    State(state): State<AppState>,
-    req: Request,
-) -> Result<Json<ChatResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Get features from request extensions first (set by middleware)
-    let features = req
-        .extensions()
-        .get::<PlanFeatures>()
-        .cloned()
-        .unwrap_or_else(|| PlanFeatures::default_oss());
-
-    // Extract JSON body manually
-    let (_parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_body".to_string(),
-                    message: "Failed to read request body".to_string(),
-                }),
-            ));
-        }
-    };
-
-    let request: ChatRequest = match serde_json::from_slice(&body_bytes) {
-        Ok(req) => req,
-        Err(_) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_json".to_string(),
-                    message: "Invalid JSON in request body".to_string(),
-                }),
-            ));
-        }
-    };
-
-    // Chat is always a paid feature - check the feature flag
-    if !features.chat_enabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            Json(ErrorResponse {
-                error: "chat_not_available".to_string(),
-                message: "Chat feature is not available with your current license. Please schedule a demo to upgrade your plan: https://cal.com/team/atelier-logos/platform-intro".to_string(),
-            }),
-        ));
-    }
-    // Validate and sanitize the file path using the helper function
-    let canonical_path = validate_file_path(&request.file_path)?;
-
-    // Read the file using the validated canonicalized path
-    let file_content = tokio::fs::read(&canonical_path).await.map_err(|_e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "file_read_error".to_string(),
-                message: "Failed to read file".to_string(),
-            }),
-        )
-    })?;
-
-    // Extract filename safely from the validated canonical path
-    let file_name = canonical_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    let analysis = analyze_binary(&file_name, &file_content, &state.crypto_provider)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "analysis_error".to_string(),
-                    message: format!("Failed to analyze binary: {}", e),
-                }),
-            )
-        })?;
-
-    // Store model info before moving values
-    let model_used = request
-        .hf_repo
-        .as_ref()
-        .or(request.model_path.as_ref())
-        .map(|s| s.clone())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    // Handle inference with HTTP provider
-    let response = match request.provider.as_str() {
-        "http" => {
-            let inference_url = request
-                .inference_url
-                .unwrap_or_else(|| "http://localhost:11434".to_string());
-
-            // Validate the inference URL for SSRF protection
-            let ssrf_validator = crate::ssrf_protection::SSRFValidator::new();
-            let validated_url = ssrf_validator.validate_url(&inference_url).map_err(|e| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorResponse {
-                        error: "ssrf_protection_violation".to_string(),
-                        message: format!("SSRF protection violation: {}", e),
-                    }),
-                )
-            })?;
-
-            let provider =
-                HTTPProvider::new(validated_url.to_string(), None, request.provider_token);
-
-            let mut options = request.options.unwrap_or_default();
-            options.model_path = request.model_path;
-            options.hf_repo = request.hf_repo;
-            // Note: options.model is already set from the request.options if provided
-
-            chat_with_provider(&analysis, &request.question, &provider, &options)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ErrorResponse {
-                            error: "inference_error".to_string(),
-                            message: format!("Failed to chat with binary: {}", e),
-                        }),
-                    )
-                })?
-        }
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "invalid_provider".to_string(),
-                    message: "Provider must be 'http'".to_string(),
-                }),
-            ));
-        }
-    };
-
-    Ok(Json(ChatResponse {
-        answer: response.text,
-        model_used,
-        tokens_used: response.tokens_used,
-    }))
-}
-
-async fn chat_with_provider(
-    analysis: &BinaryAnalysis,
-    user_question: &str,
-    provider: &dyn InferenceProvider,
-    options: &GenerationOptions,
-) -> Result<GenerationResponse, anyhow::Error> {
-    // Check if the question asks for JSON output
-    let is_json_request = user_question.to_lowercase().contains("json")
-        || user_question.to_lowercase().contains("sbom")
-        || user_question.to_lowercase().contains("cyclonedx");
-
-    let context = if is_json_request {
-        format!(
-            "Binary Analysis Context:\n\
-             - File: {}\n\
-             - Format: {}\n\
-             - Architecture: {}\n\
-             - Size: {} bytes\n\
-             - Linked Libraries: {}\n\
-             - Imports: {}\n\
-             - Exports: {}\n\
-             - Embedded Strings: {}\n\n\
-             User Question: {}\n\n\
-             CRITICAL: You must return ONLY raw JSON. Do NOT wrap it in quotes or escape it as a string. Return the actual JSON object directly. Do not include any explanations, markdown, or code blocks. The response should start with {{ and end with }}.",
-            analysis.file_name,
-            analysis.format,
-            analysis.architecture,
-            analysis.size_bytes,
-            analysis.linked_libraries.join(", "),
-            analysis.imports.join(", "),
-            analysis.exports.join(", "),
-            analysis.embedded_strings.join(", "),
-            user_question
-        )
-    } else {
-        format!(
-            "Binary Analysis Context:\n\
-         - File: {}\n\
-         - Format: {}\n\
-         - Architecture: {}\n\
-         - Size: {} bytes\n\
-         - Linked Libraries: {}\n\
-         - Imports: {}\n\
-         - Exports: {}\n\
-         - Embedded Strings: {}\n\n\
-         User Question: {}\n\n\
-         Please provide a helpful answer about this binary based on the analysis data.",
-            analysis.file_name,
-            analysis.format,
-            analysis.architecture,
-            analysis.size_bytes,
-            analysis.linked_libraries.join(", "),
-            analysis.imports.join(", "),
-            analysis.exports.join(", "),
-            analysis.embedded_strings.join(", "),
-            user_question
-        )
-    };
-
-    let mut response = provider
-        .generate(&context, options)
-        .await
-        .map_err(|e| anyhow::anyhow!("Inference failed: {}", e))?;
-
-    // Post-process JSON responses to handle cases where the model returns JSON as a string
-    if is_json_request {
-        let text = response.text.trim();
-        // If the response looks like a JSON string (starts and ends with quotes), try to parse it
-        if text.starts_with('"') && text.ends_with('"') {
-            if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(text) {
-                response.text = serde_json::to_string(&parsed_json)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize JSON: {}", e))?;
-            }
-        }
-    }
-
-    Ok(response)
 }

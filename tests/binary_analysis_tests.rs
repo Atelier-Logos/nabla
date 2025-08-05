@@ -4,19 +4,12 @@ use nabla_cli::binary::{
     BinaryAnalysis, analyze_binary,
     metadata_extractor::{LicenseInfo, VersionInfo},
 };
-use nabla_cli::enterprise::crypto::CryptoProvider;
 use tokio;
-
-// Helper function to create a test crypto provider
-fn create_test_crypto_provider() -> CryptoProvider {
-    CryptoProvider::new(false, false).unwrap() // Use standard mode for tests
-}
 
 #[tokio::test]
 async fn test_analyze_binary_small_file() {
     let data = b"hello world"; // small, triggers small file path
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("hello.txt", data, &crypto_provider)
+    let analysis = analyze_binary("hello.txt", data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "hello.txt");
@@ -26,8 +19,7 @@ async fn test_analyze_binary_small_file() {
 #[tokio::test]
 async fn test_analyze_binary_empty_file() {
     let data = b"";
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("empty.bin", data, &crypto_provider)
+    let analysis = analyze_binary("empty.bin", data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "empty.bin");
@@ -39,8 +31,7 @@ async fn test_analyze_binary_empty_file() {
 async fn test_analyze_binary_large_file() {
     // Create a larger file to test different code paths
     let data = vec![0u8; 10000]; // 10KB file
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("large.bin", &data, &crypto_provider)
+    let analysis = analyze_binary("large.bin", &data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "large.bin");
@@ -50,8 +41,7 @@ async fn test_analyze_binary_large_file() {
 #[tokio::test]
 async fn test_analyze_binary_with_special_chars() {
     let data = b"test data with special chars: !@#$%^&*()";
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("special@chars#file.bin", data, &crypto_provider)
+    let analysis = analyze_binary("special@chars#file.bin", data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "special@chars#file.bin");
@@ -61,8 +51,7 @@ async fn test_analyze_binary_with_special_chars() {
 #[tokio::test]
 async fn test_analyze_binary_unicode_filename() {
     let data = b"test data";
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary("测试文件.bin", data, &crypto_provider)
+    let analysis = analyze_binary("测试文件.bin", data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, "测试文件.bin");
@@ -73,8 +62,7 @@ async fn test_analyze_binary_unicode_filename() {
 async fn test_analyze_binary_very_long_filename() {
     let data = b"test data";
     let long_name = "a".repeat(255); // Very long filename
-    let crypto_provider = create_test_crypto_provider();
-    let analysis = analyze_binary(&long_name, data, &crypto_provider)
+    let analysis = analyze_binary(&long_name, data)
         .await
         .expect("analyze_binary failed");
     assert_eq!(analysis.file_name, long_name);
@@ -117,6 +105,9 @@ async fn test_binary_analysis_struct() {
         metadata: serde_json::json!({"test": "value"}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some("0x1000".to_string()),
+        code_sections: vec![],
     };
 
     assert_eq!(analysis.file_name, "test.bin");
@@ -158,6 +149,9 @@ fn test_binary_analysis_serialization() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some("0x1000".to_string()),
+        code_sections: vec![],
     };
 
     // Test serialization
@@ -199,6 +193,9 @@ fn test_binary_analysis_debug() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some("0x1000".to_string()),
+        code_sections: vec![],
     };
 
     let debug_str = format!("{:?}", analysis);
@@ -230,6 +227,9 @@ fn test_binary_analysis_clone() {
         metadata: serde_json::json!({}),
         created_at: chrono::Utc::now(),
         sbom: None,
+        binary_data: Some(vec![0x7f, 0x45, 0x4c, 0x46]),
+        entry_point: Some("0x1000".to_string()),
+        code_sections: vec![],
     };
 
     let cloned_analysis = analysis.clone();

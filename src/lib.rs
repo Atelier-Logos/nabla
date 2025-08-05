@@ -18,9 +18,8 @@ pub struct AppState {
     pub config: Config,
     pub client: Client,
     pub base_url: String,
+    pub enterprise_features: bool,
     pub license_jwt_secret: Arc<[u8; 32]>,
-    pub crypto_provider: enterprise::crypto::CryptoProvider,
-    pub inference_manager: Arc<enterprise::providers::InferenceManager>, // add this
 }
 
 // For binary crate main.rs we still have its own AppState; To avoid duplication, we
@@ -30,7 +29,6 @@ pub struct AppState {
 // Re-export the server function from the binary crate
 pub mod server {
     pub async fn run_server(port: u16) -> anyhow::Result<()> {
-        use crate::enterprise::providers::InferenceManager;
         use axum::extract::DefaultBodyLimit;
         use axum::{
             Router,
@@ -67,21 +65,12 @@ pub mod server {
             .redirect(reqwest::redirect::Policy::none()) // disable redirects for SSRF protection
             .build()?;
 
-        let inference_manager = Arc::new(InferenceManager::new());
-
-
-        let crypto_provider = crate::enterprise::crypto::CryptoProvider::new(
-            config.fips_mode,
-            config.fips_validation,
-        )?;
-
         let state = crate::AppState {
             config: config.clone(),
             client,
             base_url: config.base_url.clone(),
+            enterprise_features: config.enterprise_features,
             license_jwt_secret,
-            crypto_provider,
-            inference_manager,
         };
 
         let cors = CorsLayer::new()
@@ -113,10 +102,6 @@ pub mod server {
                 post(crate::enterprise::attestation::attest_binary),
             )
             .route("/binary/check-cves", post(crate::routes::binary::check_cve))
-            .route(
-                "/binary/chat",
-                post(crate::routes::binary::chat_with_binary),
-            )
             .route_layer(auth_layer);
 
         let app = Router::new()

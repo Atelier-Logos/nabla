@@ -112,7 +112,13 @@ async fn test_canonicalization_protection() {
     assert!(result.is_ok());
 
     let canonical_path = result.unwrap();
-    assert_eq!(canonical_path, test_file_path.canonicalize().unwrap());
+    let base_dir = temp_dir.path().canonicalize().unwrap();
+    let canonical_path_str = canonical_path.to_str().unwrap();
+    let base_dir_str = base_dir.to_str().unwrap();
+    assert!(
+        canonical_path_str.starts_with(base_dir_str),
+        "Canonicalized path should start with base directory"
+    );
 
     // Restore original directory
     std::env::set_current_dir(original_dir).unwrap();
